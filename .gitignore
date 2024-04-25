@@ -1,0 +1,7 @@
+groq_cookie.json
+.env
+__pycache__/
+*.log
+*.pyc
+hh.py
+test.py

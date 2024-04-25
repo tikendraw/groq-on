@@ -1,9 +1,9 @@
 # GROQ without API
 
-This projects uses playwright to Access [GROQ]('https://www.groq.com') using python
+This projects uses playwright to Access [GROQ](https://www.groq.com) using python
 
 ## Inspiration(Story)
-On a long summer evening of april 2023 I was sitting in front of cranky old fan working on my [News-app](https://www.github.com/tikendraw/news-app). I needed a llm api to summarize the news articles. As a poor man I do not have money to buy llm subscription, I chose to use [Gemini]('https://gemini.google.com) (limit 1 req/sec), it took avg 8-9 sec per request to process, felt dissapointed.
+On a long summer evening of april 2023 I was sitting in front of cranky old fan working on my [News-app](https://www.github.com/tikendraw/news-app). I needed a llm api to summarize the news articles. As a poor man I do not have money to buy llm subscription, I chose to use [Gemini](https://gemini.google.com) (limit 1 req/sec), it took avg 8-9 sec per request to process, felt dissapointed.
 
 At this point I have heard about Groq and its new LPU hardware that outputs insanely fast. 
 There wasn't any free api for poor people like me. So I decided to emulate the user using playwright and can query and get the llm response. Finally as the thousands of seconds passed I could manage to make it work. Now you can too. 
@@ -27,7 +27,7 @@ make sure you have playwright installed, if not do this
 ```
 pip install playwright
 
-#install firefox
+# install firefox
 playwright install firefox
 ```
 
@@ -42,7 +42,26 @@ groq "how old is sun" "how to fuck around and find out"\
     --output_dir ./output/\
 ```
 ### Code
+```
+from groqon.groq import groq
 
+# pass single query
+groq('how old is earth', model='llama3-70b')
+
+# pass list of query
+groq(["Is aunt may peter parker's actual mother?", "kya gangadhar hi shaktimaan hai?"], model='llama3-70b')
+
+# pass other parameters
+groq(
+    'Why am I awake at 2.30 AM?', 
+    model='llama3-70b', 
+    cookie_file="./groq_cookie.json", 
+    headless=False,
+    save_dir='./responses/',
+    save_output=True
+    
+    )
+```
 ## help
 
 ```

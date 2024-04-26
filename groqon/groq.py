@@ -10,29 +10,53 @@ from .groq_utils import (
     check_element_and_get_text,
     clear_chat,
     file_exists,
-    get_content,
+    get_content_text,
     get_cookie,
-    get_query,
+    get_query_text,
     save_cookie,
     select_model,
+    set_system_prompt,
 )
+from pathlib import Path
 
-URL = 'https://groq.com/'
+
+URL = "https://groq.com/"
 QUERY_INPUT_SELECTOR = "#chat"
 QUERY_SUBMIT_SELECTOR = ".self-end"
-END_TEXT_SELECTOR = "body > main > div > div.flex.flex-col-reverse.md\:flex-col.md\:relative.w-full.max-w-\[900px\].bg-background.z-10.gap-2.md\:gap-6 > div > a > div > div"
+END_TEXT_SELECTOR = r"body > main > div > div.flex.flex-col-reverse.md\:flex-col.md\:relative.w-full.max-w-\[900px\].bg-background.z-10.gap-2.md\:gap-6 > div > a > div > div"
+
 
 @contextmanager
-def groq_context(cookie_file:str='groq_cookie.json', model:str='llama3-70b', headless:bool=False):
+def groq_context(
+    cookie_file: str = "groq_cookie.json",
+    model: str = "llama3-70b",
+    headless: bool = False,
+    system_prompt: str = None,
+) -> Page:
+    """
+    Context manager for creating a Groq context.
+
+    Args:
+        cookie_file (str, optional): The path to the cookie file. Defaults to 'groq_cookie.json'.
+        model (str, optional): The model to use. Defaults to 'llama3-70b'.
+        headless (bool, optional): Whether to run the browser in headless mode. Defaults to False.
+        system_prompt (str, optional): The system prompt to set. Defaults to None.
+
+    Yields:
+        Page: The page object for interacting with the browser.
+
+    Raises:
+        None
+    """
 
     url = URL
 
     if file_exists(cookie_file):
         cookie = get_cookie(cookie_file)
     else:
-        headless=False
-        cookie=None
-    
+        headless = False
+        cookie = None
+
     with sync_playwright() as p:
         browser = p.firefox.launch(headless=headless)
         context = browser.new_context()
@@ -42,17 +66,24 @@ def groq_context(cookie_file:str='groq_cookie.json', model:str='llama3-70b', hea
             context.add_cookies(cookie)
             print("Cookie loaded!!!")
         else:
-            print("Cookie not loaded!!!", "You have 120 seconds to login to groq.com, Make it quick!!! HEADLESS is set to False")
+            print(
+                "Cookie not loaded!!!",
+                "You have 120 seconds to login to groq.com, Make it quick!!! HEADLESS is set to False",
+            )
 
-        page.goto(url, timeout=60_000, wait_until='networkidle')
-        
+        page.goto(url, timeout=60_000, wait_until="networkidle")
+
         if not cookie:
-            page.wait_for_timeout(1000*120) #120 sec to login
-            
+            page.wait_for_timeout(1000 * 120)  # 120 sec to login
+
         page.screenshot(path="screenshot1.png", full_page=True)
 
         # Set model
         select_model(page, model_choice=model)
+
+        # Set system prompt
+        if system_prompt:
+            set_system_prompt(page, system_prompt=system_prompt)
 
         try:
             yield page
@@ -62,13 +93,28 @@ def groq_context(cookie_file:str='groq_cookie.json', model:str='llama3-70b', hea
             browser.close()
             print("Browser closed!!!")
 
-def get_groq_response(page:Page, query:str, save_output:bool=False, save_dir:str=str(os.getcwd())):
+
+def get_groq_response(
+    page: Page, query: str, save_output: bool = False, save_dir: str = os.getcwd()
+) -> dict:
+    """
+    Retrieves the response to a given query using the specified page object.
+
+    Args:
+        page (Page): The page object for interacting with the browser.
+        query (str): The query string to be filled in the input field.
+        save_output (bool, optional): A flag indicating whether to save the output as a JSON file. Defaults to False.
+        save_dir (str, optional): The directory path to save the output JSON file. Defaults to the current working directory.
+
+    Returns:
+        dict: A dictionary containing the extracted query, response content, and token/s value.
+    """
     # Add query
     page.locator(QUERY_INPUT_SELECTOR).fill(query)
     # Submit query
     page.locator(QUERY_SUBMIT_SELECTOR).click()
 
-    # Check if generation finished if not wait till end and get tok/s
+    # Check if generation finished if not wait till end and get token/s
     is_present, end_text = check_element_and_get_text(page, END_TEXT_SELECTOR)
 
     if not is_present:
@@ -77,60 +123,131 @@ def get_groq_response(page:Page, query:str, save_output:bool=False, save_dir:str
         return
 
     # Get query and text generated
-    query_text, raw_query_html = get_query(page)
-    response_content, raw_response_html = get_content(page)
+    query_text, raw_query_html = get_query_text(page)
+    response_content, raw_response_html = get_content_text(page)
 
     # Screenshot the content (for no reason)
     page.screenshot(path="screenshot2.png", full_page=True)
     clear_chat(page)
 
     output_dict = {
-                "query": query_text,
-                "response": response_content,
-                "query_html":raw_query_html,
-                "response_html":raw_response_html,
-                "tok/s": end_text
-            }
+        "query": query_text,
+        "response": response_content,
+        # "query_html":raw_query_html,
+        # "response_html":raw_response_html,
+        "token/s": end_text,
+    }
     if save_output:
-        with open(os.path.join(save_dir,query_text + '.json'), 'w') as f:
+        save_dir = Path(save_dir)
+        save_dir.mkdir(parents=True, exist_ok=True)
+
+        json_file = save_dir / f"{query_text}.json"
+
+        with open(json_file, "w") as f:
             json.dump(output_dict, f)
 
     return output_dict
-    
 
-def groq(query_list:list[str], cookie_file:str='groq_cookie.json', model:str='llama3-70b', headless:bool=False, save_output:bool=True, save_dir=str(os.getcwd())):
-    
+
+def groq(
+    query_list: list[str],
+    cookie_file: str = "groq_cookie.json",
+    model: str = "llama3-70b",
+    headless: bool = False,
+    save_output: bool = True,
+    save_dir: str = os.getcwd(),
+    system_prompt: str = None,
+    print_output=True,
+) -> list[dict]:
+    """
+    Executes a list of Groq queries and returns a list of dictionaries containing the query, response, and token/s value.
+
+    Args:
+        query_list (list[str]): A list of Groq queries to execute.
+        cookie_file (str, optional): The path to the cookie file. Defaults to 'groq_cookie.json'.
+        model (str, optional): The model to use. Defaults to 'llama3-70b'.
+        headless (bool, optional): Whether to run the browser in headless mode. Defaults to False.
+        save_output (bool, optional): A flag indicating whether to save the output as a JSON file. Defaults to True.
+        save_dir (str, optional): The directory path to save the output JSON file. Defaults to the current working directory.
+        system_prompt (str, optional): The system prompt to set. Defaults to None.
+        print_output (bool, optional): A flag indicating whether to print the query, response, and token/s value. Defaults to True.
+
+    Returns:
+        list[dict]: A list of dictionaries containing the query, response, and token/s value for each executed query.
+    """
+
     if isinstance(query_list, str):
         query_list = [query_list]
-        
-    with groq_context(cookie_file=cookie_file, model=model, headless=headless) as page:
-        for query in query_list:
-            response = get_groq_response(page, query, save_output=save_output, save_dir=save_dir)
-            print('Query', ":", response.get('query', None))
-            print('Response', ":", response.get('response', None))
-            print('tok/s', ":", response.get('tok/s', None))
-    
 
-def main():
+    with groq_context(
+        cookie_file=cookie_file,
+        model=model,
+        headless=headless,
+        system_prompt=system_prompt,
+    ) as page:
+        response_list = []
+        for query in query_list:
+            response = get_groq_response(
+                page, query, save_output=save_output, save_dir=save_dir
+            )
+            response_list.append(response)
+
+            if print_output:
+                print("Query", ":", response.get("query", None))
+                print("Response", ":", response.get("response", None))
+                print("token/s", ":", response.get("token/s", None))
+
+        return response_list
+
+
+def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument('queries', nargs='+', help="one or alot of quoted string like 'what is the purpose of life?' 'why everyone hates meg griffin?'")
-    parser.add_argument('--model', default='llama3-70b', help=f"Available models are {" ".join(modelindex)}")
-    parser.add_argument('--cookie_file', type=str, default='groq_cookie.json')
-    parser.add_argument('--headless', action='store_true', help= "set true to not see the browser")
-    parser.add_argument('--save_output', action='store_true', help="set true to save the groq output with its query name.json")
-    parser.add_argument('--output_dir', default=str(os.getcwd()), help="Path to save the output file. Defaults to current working directory.")
+    parser.add_argument(
+        "queries",
+        nargs="+",
+        help="one or more quoted string like 'what is the purpose of life?' 'why everyone hates meg griffin?'",
+    )
+    parser.add_argument(
+        "--model",
+        default="llama3-70b",
+        help=f"Available models are {' '.join(modelindex)}",
+    )
+    parser.add_argument(
+        "--cookie_file",
+        type=str,
+        default="groq_cookie.json",
+        help="looks in current directory by default for groq_cookie.json. If not found, You will have to login when the browswer opens under 120 seconds. It's one time thing",
+    )
+    parser.add_argument(
+        "--system_prompt",
+        type=str,
+        help="System prompt to be given to the llm model. Its like 'you are samuel l jackson as my assistant'. Default is None.",
+    )
+    parser.add_argument(
+        "--headless", action="store_true", help="set true to not see the browser"
+    )
+    parser.add_argument(
+        "--save_output",
+        action="store_true",
+        help="set true to save the groq output with its query name.json",
+    )
+    parser.add_argument(
+        "--output_dir",
+        default=os.getcwd(),
+        help="Path to save the output file. Defaults to current working directory.",
+    )
 
     args = parser.parse_args()
-    
+
     groq(
-        cookie_file=args.cookie_file, 
-        model=args.model, 
+        cookie_file=args.cookie_file,
+        model=args.model,
         headless=args.headless,
-        query_list=args.queries, 
-        save_output=args.save_output, 
-        save_dir=args.output_dir
+        query_list=args.queries,
+        save_output=args.save_output,
+        save_dir=args.output_dir,
+        system_prompt=args.system_prompt,
+        print_output=True,
     )
 
 
-if __name__ == '__main__':
-    main()

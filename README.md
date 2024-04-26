@@ -3,7 +3,7 @@
 This projects uses playwright to Access [GROQ](https://www.groq.com) using python
 
 ## Inspiration(Story)
-On a long summer evening of april 2023 I was sitting in front of cranky old fan working on my [News-app](https://www.github.com/tikendraw/news-app). I needed a llm api to summarize the news articles. As a poor man I do not have money to buy llm subscription, I chose to use [Gemini](https://gemini.google.com) (limit 1 req/sec), it took avg 8-9 sec per request to process, felt dissapointed.
+On a long summer evening of april 2024 I was sitting in front of cranky old fan working on my [News-app](https://www.github.com/tikendraw/news-app). I needed a llm api to summarize the news articles. As a poor man I do not have money to buy llm subscription, I chose to use [Gemini](https://gemini.google.com) (limit 1 req/sec), it took avg 8-9 sec per request to process, felt dissapointed.
 
 At this point I have heard about Groq and its new LPU hardware that outputs insanely fast. 
 There wasn't any free api for poor people like me. So I decided to emulate the user using playwright and can query and get the llm response. Finally as the thousands of seconds passed I could manage to make it work. Now you can use groq.com as llm too. I did it for poor people. 

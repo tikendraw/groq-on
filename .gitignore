@@ -5,3 +5,6 @@ __pycache__/
 *.pyc
 hh.py
 test.py
+*.json
+screenshot*.png
+dist/*

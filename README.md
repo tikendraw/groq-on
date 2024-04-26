@@ -1,4 +1,4 @@
-# GROQ without API
+# GROQ without API : GroqOn
 
 This projects uses playwright to Access [GROQ](https://www.groq.com) using python
 
@@ -6,11 +6,7 @@ This projects uses playwright to Access [GROQ](https://www.groq.com) using pytho
 On a long summer evening of april 2023 I was sitting in front of cranky old fan working on my [News-app](https://www.github.com/tikendraw/news-app). I needed a llm api to summarize the news articles. As a poor man I do not have money to buy llm subscription, I chose to use [Gemini](https://gemini.google.com) (limit 1 req/sec), it took avg 8-9 sec per request to process, felt dissapointed.
 
 At this point I have heard about Groq and its new LPU hardware that outputs insanely fast. 
-There wasn't any free api for poor people like me. So I decided to emulate the user using playwright and can query and get the llm response. Finally as the thousands of seconds passed I could manage to make it work. Now you can too. 
-
-I did it for poor people. 
-
-
+There wasn't any free api for poor people like me. So I decided to emulate the user using playwright and can query and get the llm response. Finally as the thousands of seconds passed I could manage to make it work. Now you can use groq.com as llm too. I did it for poor people. 
 
 ## Working
 
@@ -20,8 +16,9 @@ I did it for poor people.
 * One way query.
 
 ## Installation
+
 ```
-pip install groq-on
+pip install groqon
 ```
 make sure you have playwright installed, if not do this
 ```
@@ -53,13 +50,14 @@ groq(["Is aunt may peter parker's actual mother?", "kya gangadhar hi shaktimaan 
 
 # pass other parameters
 groq(
-    'Why am I awake at 2.30 AM?', 
+    'Why am I awake at 2.30 AM?',
     model='llama3-70b', 
     cookie_file="./groq_cookie.json", 
     headless=False,
-    save_dir='./responses/',
-    save_output=True
-    
+    save_dir='./newresponses/',
+    save_output=True, 
+    system_prompt="you are jarvis/vision assistant from Ironman and marvel movie, and assistant of me, call me sir",
+    print_output=True
     )
 ```
 ## help
@@ -74,7 +72,7 @@ positional arguments:
 
 options:
   -h, --help            show this help message and exit
-  --model MODEL         Available models are gemma-7b llama2-70b llama3-70b llama3-8b mixtral-8x7b
+  --model MODEL         Available models are gemma-7b llama3-70b llama3-8b mixtral-8x7b
   --cookie_file COOKIE_FILE
   --headless            set true to not see the browser
   --save_output         set true to save the groq output with its query name.json
@@ -82,14 +80,20 @@ options:
                         Path to save the output file. Defaults to current working directory.
 ```
 
-## TODO
+## TODO (Need Help)
 
+* [x] Set System Prompt
 * [ ] Keep updated
 * [ ] Add something
 * [ ] Use Better parser
-* [ ] Use color for better Visual
+* [ ] Use color for better Visual / Rich text formatting
+* [ ] Add logger
 * [ ] Multiround chat
 
 ## Contribution
 
 Feel free to add features and keep it maintained and do pull requests.
+
+## Buy me a Coffee/Chai
+[!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/tikendraw)
+

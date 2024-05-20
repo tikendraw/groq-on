@@ -6,8 +6,9 @@ authors = ["tikendraw <tikendraksahu1029@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.11"
+python = ">=3.11,<3.12"
 playwright = "^1.43.0"
+unstructured = "^0.13.4"
 
 
 [tool.poetry.group.dev.dependencies]

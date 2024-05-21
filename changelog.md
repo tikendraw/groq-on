@@ -1,6 +1,9 @@
 # Changelog
 
 
+## 21-05-2024
+* upaded the element selector
+
 ## 26-04-2024
 * added system prompt support for flavourful conversation
 * added Documentation

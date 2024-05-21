@@ -4,7 +4,7 @@ import os
 from contextlib import contextmanager
 
 from playwright.sync_api import Page, sync_playwright
-
+from playwright._impl._errors import TimeoutError
 from .groq_config import modelindex
 from .groq_utils import (
     check_element_and_get_text,
@@ -18,18 +18,19 @@ from .groq_utils import (
     set_system_prompt,
 )
 from pathlib import Path
+from .element_selectors import(
+    END_TEXT_SELECTOR,
+    QUERY_INPUT_SELECTOR,
+    QUERY_SUBMIT_SELECTOR
+)
 
 
 URL = "https://groq.com/"
-QUERY_INPUT_SELECTOR = "#chat"
-QUERY_SUBMIT_SELECTOR = ".self-end"
-END_TEXT_SELECTOR = r"body > main > div > div.flex.flex-col-reverse.md\:flex-col.md\:relative.w-full.max-w-\[900px\].bg-background.z-10.gap-2.md\:gap-6 > div > a > div > div"
-
 
 @contextmanager
 def groq_context(
     cookie_file: str = "groq_cookie.json",
-    model: str = "llama3-70b",
+    model: str = "llama3-8b",
     headless: bool = False,
     system_prompt: str = None,
 ) -> Page:
@@ -71,7 +72,7 @@ def groq_context(
                 "You have 120 seconds to login to groq.com, Make it quick!!! HEADLESS is set to False",
             )
 
-        page.goto(url, timeout=60_000, wait_until="networkidle")
+        page.goto(url, timeout=60_000) #wait_until="networkidle")
 
         if not cookie:
             page.wait_for_timeout(1000 * 120)  # 120 sec to login
@@ -84,7 +85,7 @@ def groq_context(
         # Set system prompt
         if system_prompt:
             set_system_prompt(page, system_prompt=system_prompt)
-
+            
         try:
             yield page
         finally:
@@ -115,8 +116,12 @@ def get_groq_response(
     page.locator(QUERY_SUBMIT_SELECTOR).click()
 
     # Check if generation finished if not wait till end and get token/s
-    is_present, end_text = check_element_and_get_text(page, END_TEXT_SELECTOR)
-
+    try: 
+        is_present, end_text = check_element_and_get_text(page, END_TEXT_SELECTOR)
+    except TimeoutError as e:
+        print("Couldn't find finish token, ",e)
+        return
+    
     if not is_present:
         print("Generation not finished!!!")
         page.screenshot(path="screenshot_generation_not_finished.png", full_page=True)
@@ -169,8 +174,8 @@ def groq(
         headless (bool, optional): Whether to run the browser in headless mode. Defaults to False.
         save_output (bool, optional): A flag indicating whether to save the output as a JSON file. Defaults to True.
         save_dir (str, optional): The directory path to save the output JSON file. Defaults to the current working directory.
-        system_prompt (str, optional): The system prompt to set. Defaults to None.
         print_output (bool, optional): A flag indicating whether to print the query, response, and token/s value. Defaults to True.
+        system_prompt (str, optional): The system prompt to set. Defaults to None.
 
     Returns:
         list[dict]: A list of dictionaries containing the query, response, and token/s value for each executed query.
@@ -196,7 +201,6 @@ def groq(
                 print("Query", ":", response.get("query", None))
                 print("Response", ":", response.get("response", None))
                 print("token/s", ":", response.get("token/s", None))
-
         return response_list
 
 
@@ -210,7 +214,7 @@ def main() -> None:
     parser.add_argument(
         "--model",
         default="llama3-70b",
-        help=f"Available models are {' '.join(modelindex)}",
+        help=f"Available models are {' '.join(modelindex.keys())}",
     )
     parser.add_argument(
         "--cookie_file",

@@ -7,15 +7,20 @@ from playwright.sync_api import Page
 from typing import Any
 from .groq_config import modelindex
 
-CLEAR_CHAT_BUTTON = r"body > main > div > div.flex.flex-col-reverse.md\:flex-col.md\:relative.w-full.max-w-\[900px\].bg-background.z-10.gap-2.md\:gap-6 > div > button.inline-flex.items-center.justify-center.whitespace-nowrap.rounded-md.text-sm.font-medium.ring-offset-background.transition-colors.focus-visible\:outline-none.disabled\:pointer-events-none.disabled\:opacity-50.underline-offset-4.h-10.p-0.text-muted-foreground.hover\:text-primaryaccent.hover\:no-underline"
-DROPDOWN_BUTTON = r"body > header > div.flex-1.flex.items-center.justify-center.md\:col-span-4.md\:col-start-2 > div > button.flex.h-10.w-full.items-center.justify-between.border.border-input.bg-background.py-2.text-sm.ring-offset-background.placeholder\:text-muted-foreground.focus\:outline-none.focus\:ring-ring.focus\:ring-offset-2.disabled\:cursor-not-allowed.disabled\:opacity-50.\[\&\>span\]\:line-clamp-1.ml-auto.max-w-\[160px\].sm\:max-w-\[190px\].rounded-none.border-none.overflow-hidden.px-2.sm\:px-3.focus\:ring-0"
-QUERY_SELECTOR = "div.break-words"
-RESPONSE_SELECTOR = "div.text-base"
-PROMPT_SETTER_SELETOR = r"body > header > div.flex-1.flex.items-center.justify-center.md\:col-span-4.md\:col-start-2 > div > button.flex.gap-1.items-center.ml-1.px-2.sm\:px-3"
-PROMPT_TEXTAREA_SELECTOR = r"#radix-\:r3\: > textarea"
-PROMPT_SAVE_BUTTON_SELECTOR = r"#radix-\:r3\: > div.flex.justify-end.gap-5 > button.inline-flex.items-center.justify-center.whitespace-nowrap.rounded-md.text-sm.font-medium.ring-offset-background.transition-colors.focus-visible\:outline-none.disabled\:pointer-events-none.disabled\:opacity-50.hover\:bg-gray-600.dark\:hover\:bg-slate-200.h-10.px-4.py-2.text-background.bg-foreground"
+from .element_selectors import(
+    CLEAR_CHAT_BUTTON, 
+    DROPDOWN_BUTTON, 
+    QUERY_SELECTOR, 
+    RESPONSE_SELECTOR, 
+    PROMPT_SETTER_SELETOR, 
+    SYSTEM_PROMPT_TEXTAREA, 
+    PROMPT_SAVE_BUTTON_SELECTOR, 
+    PROFILE_BUTTON_SELECTOR,
+    ADVANCED_SETTING_SELECTOR,
+    SYSTEM_PROMPT_BUTTON
+)
 
-
+# setting system prompt is removed
 def set_system_prompt(page: Page, system_prompt: str) -> None:
     """
     Sets the system prompt on the page for interaction.
@@ -28,8 +33,13 @@ def set_system_prompt(page: Page, system_prompt: str) -> None:
         None
     """
     try:
-        page.locator(PROMPT_SETTER_SELETOR).click()
-        text_area = page.locator(PROMPT_TEXTAREA_SELECTOR)
+        profile = page.locator(PROFILE_BUTTON_SELECTOR)
+        profile.click()
+        
+        page.locator(ADVANCED_SETTING_SELECTOR).click()
+        page.locator(SYSTEM_PROMPT_BUTTON).click()
+        
+        text_area = page.locator(SYSTEM_PROMPT_TEXTAREA)
         text_area.fill(system_prompt)
 
         page.locator(PROMPT_SAVE_BUTTON_SELECTOR).click()
@@ -61,7 +71,7 @@ def select_model(page: Page, model_choice) -> None:
         # dropdown_button
         page.locator(DROPDOWN_BUTTON).click()
 
-        downpress = modelindex.index(model_choice)
+        downpress = list(modelindex.keys()).index(model_choice)
 
         for _ in range(downpress):
             page.keyboard.press("ArrowDown")
@@ -230,6 +240,7 @@ def extract_to_markdown(html_source: str) -> str:
     for line in html_source.split("\n"):
         line = line.strip()
         if line.startswith("<pre>"):
+            
             output.append("```\n")
             code_block = []
         elif line.startswith("</pre>"):

@@ -2,9 +2,21 @@ groq_cookie.json
 .env
 __pycache__/
 *.log
+./logs/*
+./saved_responses/*
 *.pyc
 hh.py
 test.py
 *.json
 screenshot*.png
 dist/*
+"curl api groq com.txt"
+curl\ api\ groq\ com.txt
+./curl\ api\ groq\ com.txt
+./"curl api groq com.txt"
+*.png
+./requests.txt
+jj.py
+'...'
+./hars/
+hars/*

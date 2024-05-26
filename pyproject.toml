@@ -7,7 +7,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-playwright = "^1.44.0"
+playwright = "1.44.0"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -18,5 +18,5 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-groqon = 'groqon.groq:main'
-groq = 'groqon.groq:main'
+groqon = 'groqon.sync_api.groq:main'
+groq = 'groqon.sync_api.groq:main'

@@ -2,14 +2,16 @@ import json
 import re
 from html import unescape
 from pathlib import Path
+from tqdm import tqdm
+import time
 
 from playwright.sync_api import Page
 from typing import Any
-from .groq_config import modelindex
-
-from .element_selectors import(
+from ..groq_config import modelindex
+from ..parsing import extract_to_markdown
+from ..element_selectors import(
     CLEAR_CHAT_BUTTON, 
-    DROPDOWN_BUTTON, 
+    MODEL_DROPDOWN_SELECTOR, 
     QUERY_SELECTOR, 
     RESPONSE_SELECTOR, 
     PROMPT_SETTER_SELETOR, 
@@ -69,7 +71,7 @@ def select_model(page: Page, model_choice) -> None:
     """
     try:
         # dropdown_button
-        page.locator(DROPDOWN_BUTTON).click()
+        page.locator(MODEL_DROPDOWN_SELECTOR).click()
 
         downpress = list(modelindex.keys()).index(model_choice)
 
@@ -224,43 +226,7 @@ def save_cookie(cookie: Any, filename: str = "cookies.json") -> None:
         json.dump(cookie, output)
 
 
-def extract_to_markdown(html_source: str) -> str:
-    """
-    Extracts markdown content from the given HTML source.
 
-    Args:
-        html_source (str): The HTML source code from which to extract markdown content.
-
-    Returns:
-        str: The extracted markdown content from the HTML source.
-    """
-    output = []
-    in_table = False
-    code_block = []
-    for line in html_source.split("\n"):
-        line = line.strip()
-        if line.startswith("<pre>"):
-            
-            output.append("```\n")
-            code_block = []
-        elif line.startswith("</pre>"):
-            code_block.append(line.replace("</pre>", ""))
-            code = unescape("\n".join(code_block))
-            output.append(code + "\n")
-            output.append("```\n\n")
-            code_block = []
-        elif line.startswith("<table"):
-            table_lines = [line]
-            in_table = True
-        elif in_table and line.startswith("</table>"):
-            table_lines.append(line)
-            table = "\n".join(table_lines)
-            output.append(table + "\n\n")
-            in_table = False
-        elif in_table:
-            table_lines.append(line)
-        else:
-            text = re.sub(r"<[^>]+>", "", line)
-            if text:
-                output.append(text + "\n")
-    return "".join(output).strip().strip(r"\n")
+def show_progress_bar(seconds):
+    for _ in tqdm(range(seconds), unit='s', bar_format="{l_bar}{bar}| {n_fmt}/{total_fmt} [{elapsed}<{remaining}]"):
+        time.sleep(1)

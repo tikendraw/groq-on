@@ -2,10 +2,17 @@ import argparse
 import json
 import os
 from contextlib import contextmanager
+from pathlib import Path
 
-from playwright.sync_api import Page, sync_playwright
 from playwright._impl._errors import TimeoutError
-from .groq_config import modelindex
+from playwright.sync_api import Page, sync_playwright
+
+from ..element_selectors import (
+    END_TEXT_SELECTOR,
+    QUERY_INPUT_SELECTOR,
+    QUERY_SUBMIT_SELECTOR,
+)
+from ..groq_config import modelindex, URL, GROQ_COOKIE_FILE
 from .groq_utils import (
     check_element_and_get_text,
     clear_chat,
@@ -17,22 +24,15 @@ from .groq_utils import (
     select_model,
     set_system_prompt,
 )
-from pathlib import Path
-from .element_selectors import(
-    END_TEXT_SELECTOR,
-    QUERY_INPUT_SELECTOR,
-    QUERY_SUBMIT_SELECTOR
-)
 
-
-URL = "https://groq.com/"
 
 @contextmanager
 def groq_context(
-    cookie_file: str = "groq_cookie.json",
+    cookie_file: str = GROQ_COOKIE_FILE,
     model: str = "llama3-8b",
     headless: bool = False,
     system_prompt: str = None,
+    reset_cookies=False
 ) -> Page:
     """
     Context manager for creating a Groq context.
@@ -51,6 +51,9 @@ def groq_context(
     """
 
     url = URL
+    
+    if reset_cookies:
+        os.remove(GROQ_COOKIE_FILE)
 
     if file_exists(cookie_file):
         cookie = get_cookie(cookie_file)
@@ -69,7 +72,7 @@ def groq_context(
         else:
             print(
                 "Cookie not loaded!!!",
-                "You have 120 seconds to login to groq.com, Make it quick!!! HEADLESS is set to False",
+                "You have 120 seconds to login to groq.com, Make it quick!!! HEADLESS is set to False, just a one time thing.",
             )
 
         page.goto(url, timeout=60_000) #wait_until="networkidle")
@@ -91,6 +94,7 @@ def groq_context(
         finally:
             # Save cookie
             save_cookie(context.cookies(), cookie_file)
+            page.close()
             browser.close()
             print("Browser closed!!!")
 
@@ -156,13 +160,14 @@ def get_groq_response(
 
 def groq(
     query_list: list[str],
-    cookie_file: str = "groq_cookie.json",
+    cookie_file: str = GROQ_COOKIE_FILE,
     model: str = "llama3-70b",
     headless: bool = False,
     save_output: bool = True,
     save_dir: str = os.getcwd(),
     system_prompt: str = None,
     print_output=True,
+    reset_cookies=False
 ) -> list[dict]:
     """
     Executes a list of Groq queries and returns a list of dictionaries containing the query, response, and token/s value.
@@ -189,6 +194,7 @@ def groq(
         model=model,
         headless=headless,
         system_prompt=system_prompt,
+        reset_cookies=reset_cookies
     ) as page:
         response_list = []
         for query in query_list:
@@ -203,6 +209,7 @@ def groq(
                 print("token/s", ":", response.get("token/s", None))
         return response_list
 
+                
 
 def main() -> None:
     parser = argparse.ArgumentParser()
@@ -219,7 +226,7 @@ def main() -> None:
     parser.add_argument(
         "--cookie_file",
         type=str,
-        default="groq_cookie.json",
+        default=GROQ_COOKIE_FILE,
         help="looks in current directory by default for groq_cookie.json. If not found, You will have to login when the browswer opens under 120 seconds. It's one time thing",
     )
     parser.add_argument(
@@ -228,7 +235,10 @@ def main() -> None:
         help="System prompt to be given to the llm model. Its like 'you are samuel l jackson as my assistant'. Default is None.",
     )
     parser.add_argument(
-        "--headless", action="store_true", help="set true to not see the browser"
+        "--headless", 
+        type=str,
+        default='True',
+        help="set true to not see the browser"
     )
     parser.add_argument(
         "--save_output",
@@ -241,17 +251,32 @@ def main() -> None:
         help="Path to save the output file. Defaults to current working directory.",
     )
 
-    args = parser.parse_args()
+    parser.add_argument(
+        "--reset_cookies",
+        action="store_true", 
+        help="deletes the old cookie , need to login again"    
+    )
 
+    args = parser.parse_args()
+    def check_headless(x):
+        if x.lower().strip() == "true":
+            return True
+        else:
+            return False
+
+
+    headless = check_headless(args.headless)
+    
     groq(
         cookie_file=args.cookie_file,
         model=args.model,
-        headless=args.headless,
+        headless=headless,
         query_list=args.queries,
         save_output=args.save_output,
         save_dir=args.output_dir,
         system_prompt=args.system_prompt,
         print_output=True,
+        reset_cookie=args.reset_cookies
     )
 
 

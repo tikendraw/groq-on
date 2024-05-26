@@ -1,5 +1,7 @@
 # Changelog
 
+## 22-05-2024
+* Adding async functionality
 
 ## 26-04-2024
 * added system prompt support for flavourful conversation

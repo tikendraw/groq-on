@@ -74,15 +74,16 @@ options:
   -h, --help            show this help message and exit
   --model MODEL         Available models are gemma-7b llama3-70b llama3-8b mixtral-8x7b
   --cookie_file COOKIE_FILE
-  --headless            set true to not see the browser
+  --headless            set true to not see the browser, e.g --headless True/False
   --save_output         set true to save the groq output with its query name.json
   --output_dir OUTPUT_DIR
                         Path to save the output file. Defaults to current working directory.
+  --reset_cookies       Deletes the old cookies, need to login again
 ```
 
 ## TODO (Need Help)
 
-* [x] Set System Prompt
+* [ ] Set System Prompt
 * [ ] Keep updated
 * [ ] Add something
 * [ ] Use Better parser

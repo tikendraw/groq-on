@@ -1,4 +1,3 @@
-
 # groq_utils.py
 
 import json
@@ -22,13 +21,14 @@ from ..element_selectors import (
     SYSTEM_PROMPT_TEXTAREA,
     QUERY_SELECTOR,
     RESPONSE_SELECTOR,
-    MODEL_NAME_SELECTOR
+    MODEL_NAME_SELECTOR,
 )
 from ..groq_config import modelindex
 from ..parsing import extract_to_markdown
 from ..logger import get_logger
 
 logger = get_logger(__name__)
+
 
 async def get_text_by_selector(page: Page, selector) -> str:
     """
@@ -48,9 +48,12 @@ async def get_text_by_selector(page: Page, selector) -> str:
         html = await html.inner_html()
         return extract_to_markdown(html), html
     except Exception as e:
-        logger.exception(f"Exception occured while getting text from {selector}, ", exc_info= e)
+        logger.exception(
+            f"Exception occured while getting text from {selector}, ", exc_info=e
+        )
         raise e
-    
+
+
 async def get_query_text(page: Page) -> tuple[str, str]:
     """
     Extracts the query text from the input field on the specified page object.
@@ -79,9 +82,14 @@ async def get_content_text(page: Page) -> tuple[str, str]:
     return content_text, content_html
 
 
-
-
-async def check_element_and_get_text(page: Page, selector: str, timeout: int = 1000 * 120, hidden=False, max_retries=100, retry_delay=1) -> tuple[bool, str]:
+async def check_element_and_get_text(
+    page: Page,
+    selector: str,
+    timeout: int = 1000 * 120,
+    hidden=False,
+    max_retries=100,
+    retry_delay=1,
+) -> tuple[bool, str]:
     """
     Checks if an element with the specified selector is present on the page and retrieves its text content.
 
@@ -100,7 +108,9 @@ async def check_element_and_get_text(page: Page, selector: str, timeout: int = 1
     retries = 0
     while retries < max_retries:
         try:
-            element = await page.wait_for_selector(selector, state='attached', timeout=retry_delay * 1000)
+            element = await page.wait_for_selector(
+                selector, state="attached", timeout=retry_delay * 1000
+            )
             if element:
                 text = await element.inner_text()
                 return True, text
@@ -129,7 +139,7 @@ async def select_model(page: Page, model_choice: str = "llama3-8b") -> Page:
     Returns:
         None
     """
-    try: 
+    try:
         a = await page.wait_for_selector(MODEL_DROPDOWN_SELECTOR)
         a.click()
         downpress = list(modelindex.keys()).index(model_choice)
@@ -141,8 +151,9 @@ async def select_model(page: Page, model_choice: str = "llama3-8b") -> Page:
     except Exception as e:
         logger.exception("Exception occured while selecting model:: ", exc_info=e)
         pass
-    
+
     return page
+
 
 async def save_cookie(cookie: Any, file_path: str) -> None:
     """
@@ -198,13 +209,14 @@ async def clear_chat(page: Page) -> None:
     Returns:
         None
     """
-    try: 
+    try:
         await page.locator(CLEAR_CHAT_BUTTON).click()
         await page.wait_for_timeout(1000 * 3)
         logger.debug("Chat cleared!!!")
     except Exception as e:
-        logger.exception("Exception occured while clearing chat, ", exc_info= e)
+        logger.exception("Exception occured while clearing chat, ", exc_info=e)
         pass
+
 
 async def set_system_prompt(page: Page, system_prompt: str) -> None:
     """
@@ -223,7 +235,7 @@ async def set_system_prompt(page: Page, system_prompt: str) -> None:
         await page.wait_for_timeout(1000 * 3)
         logger.debug("Set system prompt!!!")
     except Exception as e:
-        logger.exception("Exception occured while setting system prompt, ", exc_info= e)
+        logger.exception("Exception occured while setting system prompt, ", exc_info=e)
         pass
 
 
@@ -234,20 +246,22 @@ async def get_model_name(page: Page):
     new_model = None
     try:
         model_name_value, _ = await get_text_by_selector(page, MODEL_NAME_SELECTOR)
-        
 
         if model_name_value in list(modelindex.values()):
             model_name = [k for k, v in modelindex.items() if v == model_name_value][0]
-            return model_name       
+            return model_name
         else:
             logger.critical(f"New Model found: {model_name_value} ")
-            new_model=model_name_value
+            new_model = model_name_value
             return None
-        
+
     except Exception as e:
-        logger.exception(f"Failed to get model name, New model found {new_model}", exc_info=e)
-        pass 
-    
+        logger.exception(
+            f"Failed to get model name, New model found {new_model}", exc_info=e
+        )
+        pass
+
+
 def show_progress_bar(iterable, desc: str) -> Any:
     """
     Displays a progress bar for the specified iterable.
@@ -260,5 +274,3 @@ def show_progress_bar(iterable, desc: str) -> Any:
         Any: The wrapped iterable with progress bar.
     """
     return tqdm(iterable, desc=desc)
-
-

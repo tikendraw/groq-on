@@ -4,7 +4,6 @@ from html import unescape
 import re
 
 
-
 def parse_script(response: str) -> tuple[str, str]:
     """Split the response into a message and a script.
 
@@ -32,7 +31,6 @@ def parse_script(response: str) -> tuple[str, str]:
     return message, script
 
 
-
 def extract_to_markdown(html_source: str) -> str:
     """
     Extracts markdown content from the given HTML source.
@@ -49,7 +47,7 @@ def extract_to_markdown(html_source: str) -> str:
     for line in html_source.split("\n"):
         line = line.strip()
         if line.startswith("<pre>"):
-            
+
             output.append("```\n")
             code_block = []
         elif line.startswith("</pre>"):
@@ -73,4 +71,3 @@ def extract_to_markdown(html_source: str) -> str:
             if text:
                 output.append(text + "\n")
     return "".join(output).strip().strip(r"\n")
-

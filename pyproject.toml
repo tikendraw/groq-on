@@ -18,5 +18,5 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-groqon = 'groqon.sync_api.groq:main'
-groq = 'groqon.sync_api.groq:main'
+groqon = 'groqon.async_api.agroq:main'
+agroq = 'groqon.async_api.agroq:main'

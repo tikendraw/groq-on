@@ -166,6 +166,7 @@ async def do_query(page: Page, user_dict: dict, queue: asyncio.Queue) -> None:
                         "model": user_dict.get("model", DEFAULT_MODEL),
                     }
                 )
+                
                 return
 
         if not is_disabled:
@@ -266,6 +267,9 @@ async def worker_task(
                 print_model_response(response)
 
             if "rate_limit_exceeded" in response["response_text"]:
+                await page.close()
+                return responses
+            if "timeout chat is disabled" == response["response_text"]:
                 await page.close()
                 return responses
 

@@ -6,6 +6,8 @@ PROMPT_SETTER_SELETOR = r"body > header > div.flex-1.flex.items-center.justify-c
 PROMPT_TEXTAREA_SELECTOR = r"#radix-\:r3\: > textarea"
 END_TEXT_SELECTOR = r"body > main > div > div.flex.flex-col.md\:flex-col.md\:relative.w-full.max-w-\[900px\].bg-background.z-10.gap-2.md\:gap-6 > div > button.block.lg\:hidden > div > div"
 QUERY_INPUT_SELECTOR = "#chat"
+CHAT_INPUT_SELECTOR = "#chat"
+
 QUERY_SUBMIT_SELECTOR = ".self-end"
 
 PROFILE_BUTTON_SELECTOR = r"#radix-\:r3\:"

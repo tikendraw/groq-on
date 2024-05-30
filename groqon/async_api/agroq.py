@@ -7,10 +7,10 @@ import os
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime
-from functools import partial
+from functools import partial, lru_cache, cache
 from pathlib import Path
 from typing import Any, Dict, List, Union
-
+from line_profiler import profile
 import aiofiles
 from icecream import ic
 from playwright.async_api import Page, Response, Route, async_playwright
@@ -19,6 +19,7 @@ from termcolor import colored
 from ..element_selectors import (
     QUERY_INPUT_SELECTOR,
     QUERY_SUBMIT_SELECTOR,
+    CHAT_INPUT_SELECTOR,
 )
 from ..groq_config import (
     AUTHENTICATION_URL,
@@ -32,7 +33,8 @@ from ..logger import get_logger
 from .agroq_utils import file_exists, get_cookie, save_cookie
 
 logger = get_logger(__name__)
-ic.disable()
+# ic.disable()
+GOT_MODELS = False
 
 
 def now() -> str:
@@ -40,7 +42,9 @@ def now() -> str:
     return datetime.now().strftime("%H:%M:%S")
 
 
+# @profile
 async def login_user(p: async_playwright, url: str, cookie_file: str) -> dict:
+    # ic("in login_user func  : ", now())
     browser = await p.firefox.launch(headless=False)
     context = await browser.new_context()
     page = await context.new_page()
@@ -52,11 +56,13 @@ async def login_user(p: async_playwright, url: str, cookie_file: str) -> dict:
     cookie = await context.cookies()
     await save_cookie(cookie, cookie_file)
     logger.debug("login page closed!")
-
+    # ic("in login_user func  : ", now())
     return cookie
 
 
+# @profile
 async def check_login(route: Route):
+    # ic("in check_login func  : ", now())
     if route.request.url == AUTHENTICATION_URL:
         response = await route.fetch()
 
@@ -66,6 +72,7 @@ async def check_login(route: Route):
         await route.abort()
 
 
+# @profile
 @asynccontextmanager
 async def groq_context(
     cookie_file: str = GROQ_COOKIE_FILE,
@@ -74,6 +81,7 @@ async def groq_context(
     system_prompt: str = None,
 ):
     """Async context manager for Playwright context setup and teardown."""
+    # ic("in groq_context func  : ", now())
     url = URL
 
     cookie = get_cookie(cookie_file) if file_exists(cookie_file) else None
@@ -81,7 +89,7 @@ async def groq_context(
     async with async_playwright() as p:
         if not cookie:
             logger.warning(
-                f"""
+                f"""get_model_from_name
 Cookie not loaded!!!
 You have 100 seconds to login to groq.com, Make it quick!!! 
 page will close in 100 seconds, Your time started: {now()}
@@ -107,6 +115,7 @@ just a one time thing.""",
             logger.debug("Browser closed!!!")
 
 
+# @profile
 async def save_output(output_dict: Dict[str, Any], save_dir: str, file_name: str):
     """Save output dictionary to a JSON file."""
 
@@ -125,31 +134,32 @@ async def save_output(output_dict: Dict[str, Any], save_dir: str, file_name: str
         await f.write(json.dumps(output_dict, indent=4))
 
 
+# @profile
 async def do_query(page: Page, user_dict: dict, queue: asyncio.Queue) -> None:
     """Perform the query on the page."""
+    # ic("in do_query func  : ", now())
 
     try:
-        textarea = page.locator("#chat")
+        textarea = page.locator(CHAT_INPUT_SELECTOR)
 
         n_try = 10
         # Check if the textarea is disabled
         is_disabled = await textarea.is_disabled()
 
         while is_disabled:
-            is_disabled = await textarea.is_disabled()
 
             # print("chat is disabled!!")
             if n_try > 0:
                 await page.wait_for_timeout(100)
+                is_disabled = await textarea.is_disabled()
+
                 # print(n_try, " try...")
                 n_try -= 1
             else:
                 # print(f"breaking loop tries reached!!! try: {n_try}")
                 await queue.put(
                     {
-                        "query": user_dict.get(
-                            "query"
-                        ),  # Add the query to the response dictionary
+                        "query": user_dict.get("query"),
                         "response_text": "timeout chat is disabled",
                         "time_stats": {},
                         "tokens_per_second": 0,
@@ -180,6 +190,8 @@ async def do_query(page: Page, user_dict: dict, queue: asyncio.Queue) -> None:
         )
 
 
+@cache
+# #@profile
 def get_model_from_name(model: str) -> str:
     """Get the full model name from the given partial name."""
 
@@ -193,6 +205,7 @@ def get_model_from_name(model: str) -> str:
     return DEFAULT_MODEL
 
 
+# @profile
 async def worker_task(
     worker_id: int,
     queries: List[str],
@@ -207,19 +220,24 @@ async def worker_task(
     queue: asyncio.Queue,
 ):
     """Worker task to process a subset of queries."""
+    # ic("in worker_task func  : ", now())
     responses = []
     async with groq_context(cookie_file=cookie_file, headless=headless) as context:
         page = await context.new_page()
 
         partial_handle = partial(handle_chat_completions, user_dict=None, queue=queue)
 
-        # page.on('request', lambda x: # print(colored(f">>>: {x.url} {x.method} {x.post_data_json}", "cyan")))
-        # page.on('response', lambda x: # print(colored(f"<<<: {x.url} {x.status}", "red")))
+        # page.on('request', lambda x: print(colored(f">>>: {x.url} {x.method} {x.post_data_json}", "cyan")))
+        # page.on('response', lambda x: print(colored(f"<<<: {x.url} {x.status}", "red")))
 
         # await page.route("**/**/static/**", abort_media)
-        # await page.route("**/**/**", abort_css_and_metrics)
+        await page.route("**/**/*.woff2", lambda x: x.abort())
+        await page.route("**/**/*.woff", lambda x: x.abort())
+        await page.route("**/**/*.css", lambda x: x.abort())
+        await page.route("**/**/web/metrics", lambda x: x.abort())
+
         await page.route("**/**/chat/completions", partial_handle)
-        # await page.route("**/**/models", get_models_from_api_response)
+        await page.route("**/**/models", get_models_from_api_response)
 
         original_user_dict = {
             "model": get_model_from_name(model),
@@ -231,6 +249,7 @@ async def worker_task(
         }
 
         await page.goto(URL, timeout=60 * 1000)
+        print("start query: ", now())
 
         for query in queries:
             user_dict = original_user_dict.copy()
@@ -258,6 +277,7 @@ async def worker_task(
         return responses
 
 
+# @profile
 async def _agroq(
     query_list: List[str],
     cookie_file: str = GROQ_COOKIE_FILE,
@@ -271,7 +291,7 @@ async def _agroq(
     n_workers: int = 2,
 ) -> List[Dict[str, Any]]:
     """Main function to perform queries and process responses."""
-    # ic("in agroq func", now())
+    # ic("in _agroq func", now())
 
     if isinstance(query_list, str):
         query_list = [query_list]
@@ -313,6 +333,7 @@ async def _agroq(
     return responses
 
 
+# @profile
 def agroq(
     query_list: List[str],
     cookie_file: str = GROQ_COOKIE_FILE,
@@ -327,6 +348,7 @@ def agroq(
 ) -> List[Dict[str, Any]]:
     """Main function to perform queries and process responses."""
     # ic("in agroq func", now())
+    print("start ", now())
     return asyncio.run(
         _agroq(
             query_list=query_list,
@@ -360,6 +382,7 @@ def print_model_response(model_response: Dict[str, Any]):
     print()
 
 
+# @profile
 async def write_json(data: Union[Dict, str], filename: str):
     """Write dictionary or JSON string to a file."""
     # ic("in write_json func", now())
@@ -375,19 +398,24 @@ async def write_json(data: Union[Dict, str], filename: str):
         await f.write(json.dumps(data, indent=4))
 
 
+# @profile
 async def get_models_from_api_response(route: Route):
     """Fetch and save models from API response."""
-
-    if "/openai/v1/models" in route.request.url:
-        response = await route.fetch()
-        data = await response.json()
-        await write_json(data, filename=MODEL_JSON_FILE)
+    global GOT_MODELS
+    if not GOT_MODELS:
+        if "/openai/v1/models" in route.request.url:
+            response = await route.fetch()
+            data = await response.json()
+            await write_json(data, filename=MODEL_JSON_FILE)
+            GOT_MODELS = True
 
     await route.continue_()
 
 
+# @profile
 async def handle_response(response: Response):
     """Handle HTTP response."""
+    # ic("in handle_response func  : ", now())
 
     try:
         if "chat/completions" in response.url:
@@ -396,9 +424,10 @@ async def handle_response(response: Response):
         logger.exception("Exception in handle_response", exc_info=e)
 
 
+# @profile
 async def handle_streamed_response(response: Response, query: str) -> Dict[str, Any]:
     """Handle streamed response from the server."""
-
+    # ic("in handle_streamed_response func  : ", now())
     accumulated_content = ""
     stats = {}
     model = None
@@ -504,31 +533,39 @@ def extract_rate_limit_info(data):
     }
 
 
-async def abort_media(route: Route):
+async def abort_images(route: Route):
     """Abort media requests to save bandwidth."""
     if route.request.resource_type == "image":
         await route.abort()
-    elif route.request.url.endswith(".woff2") or route.request.url.endswith(".woff"):
-        await route.abort()
-    elif route.request.url.endswith(".css"):
-        await route.abort()
-    # elif route.request.url.endswith("/web/metrics"):
-    #     await route.abort()
     else:
         await route.continue_()
 
 
-async def abort_css_and_metrics(route: Route):
+async def abort_fonts(route: Route):
+    if route.request.url.endswith(".woff2") or route.request.url.endswith(".woff"):
+        await route.abort()
+    else:
+        await route.continue_()
+
+
+async def abort_metics(route: Route):
+    if route.request.url.endswith("/web/metrics"):
+        await route.abort()
+    else:
+        await route.continue_()
+
+
+async def abort_css(route: Route):
     if route.request.url.endswith(".css"):
         await route.abort()
-    elif route.request.url.endswith("/web/metrics") and route.request.method == "POST":
-        await route.abort()
     else:
         await route.continue_()
 
 
+# @profile
 async def handle_chat_completions(route: Route, *args, **kwargs):
     """Handle chat completions route."""
+    # ic("in handle_chat_completions func  : ", now())
     request = route.request
 
     user_dict = kwargs.get("user_dict", {})
@@ -556,7 +593,13 @@ async def handle_chat_completions(route: Route, *args, **kwargs):
                     {"content": user_dict.get("query", "hi"), "role": "user"},
                 ],
             }
+            print("start post data : ", now())
 
+            print(
+                colored(
+                    f"***** >>> this is going as post data, {modified_data}", "green"
+                )
+            )
             await route.continue_(post_data=json.dumps(modified_data))
         else:
             await route.continue_()
@@ -568,8 +611,10 @@ async def handle_chat_completions(route: Route, *args, **kwargs):
     await queue.put(response)
 
 
+# @profile
 async def get_query_response(route: Route, query: str):
     """Fetch the response for the query."""
+    # ic("in get_query_response func  : ", now())
 
     if "chat/completions" in route.request.url:
         response = await route.fetch()

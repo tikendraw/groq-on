@@ -66,7 +66,7 @@ async def check_login(route: Route):
     if route.request.url == AUTHENTICATION_URL:
         response = await route.fetch()
 
-        print(colored(f"****: {response.body().decode('utf-8')}", "red"))
+        # print(colored(f"****: {response.body().decode('utf-8')}", "red"))
         await route.continue_()
     else:
         await route.abort()
@@ -249,7 +249,7 @@ async def worker_task(
         }
 
         await page.goto(URL, timeout=60 * 1000)
-        print("start query: ", now())
+        # print("start query: ", now())
 
         for query in queries:
             user_dict = original_user_dict.copy()
@@ -348,7 +348,7 @@ def agroq(
 ) -> List[Dict[str, Any]]:
     """Main function to perform queries and process responses."""
     # ic("in agroq func", now())
-    print("start ", now())
+    # print("start ", now())
     return asyncio.run(
         _agroq(
             query_list=query_list,
@@ -593,13 +593,9 @@ async def handle_chat_completions(route: Route, *args, **kwargs):
                     {"content": user_dict.get("query", "hi"), "role": "user"},
                 ],
             }
-            print("start post data : ", now())
+            # print("start post data : ", now())
 
-            print(
-                colored(
-                    f"***** >>> this is going as post data, {modified_data}", "green"
-                )
-            )
+            # print(colored(f"***** >>> this is going as post data, {modified_data}", "green"))
             await route.continue_(post_data=json.dumps(modified_data))
         else:
             await route.continue_()
@@ -634,10 +630,10 @@ def main() -> None:
         help="one or more quoted string like 'what is the purpose of life?' 'why everyone hates meg griffin?'",
     )
     parser.add_argument(
-        "--model",
+        "--model_list",
         nargs="+",
-        default="llama3-70b",
-        help=f"Available models are {' '.join(modelindex)}",
+        default=DEFAULT_MODEL,
+        help=f"Available models are {' '.join(modelindex)}, e.g enter as --model_list 'llama3-8b' 'gemma-7b' ",
     )
     parser.add_argument(
         "--cookie_file",
@@ -648,15 +644,11 @@ def main() -> None:
     parser.add_argument(
         "--system_prompt",
         type=str,
+        default="Please try to provide useful, helpful and actionable answers.",
         help="System prompt to be given to the llm model. Its like 'you are samuel l jackson as my assistant'. Default is None.",
     )
     parser.add_argument(
         "--headless", type=str, default="True", help="set true to not see the browser"
-    )
-    parser.add_argument(
-        "--save_output",
-        action="store_true",
-        help="set true to save the groq output with its query name.json",
     )
     parser.add_argument(
         "--output_dir",
@@ -687,10 +679,9 @@ def main() -> None:
 
     headless = check_headless(args.headless)
 
-    asyncio.run(
-        agroq(
+    out = agroq(
             cookie_file=args.cookie_file,
-            model_list=args.model,
+            model_list=args.model_list,
             headless=headless,
             query_list=args.queries,
             save_dir=args.output_dir,
@@ -700,4 +691,4 @@ def main() -> None:
             max_tokens=args.max_tokens,
             n_workers=args.n_workers,
         )
-    )
+    

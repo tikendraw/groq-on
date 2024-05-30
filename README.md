@@ -22,8 +22,6 @@ pip install groqon
 ```
 make sure you have playwright installed, if not do this
 ```
-pip install playwright
-
 # install firefox
 playwright install firefox
 ```
@@ -31,31 +29,27 @@ playwright install firefox
 ## Usage
 ### CLI
 ```
-groq "how old is sun" "how to fuck around and find out"\
+groqon "how old is sun" "how to fuck around and find out"\
     --model llama3-70b\
-    --cookie_file ./groq_cookie.json\
-    --headless\
-    --save_output\
     --output_dir ./output/\
 ```
 ### Code
 ```
-from groqon.groq import groq
+from groqon.async_api import agroq
 
 # pass single query
-groq('how old is earth', model='llama3-70b')
+agroq('how old is earth', model='llama3-70b')
 
 # pass list of query
-groq(["Is aunt may peter parker's actual mother?", "kya gangadhar hi shaktimaan hai?"], model='llama3-70b')
+agroq(["Is aunt may peter parker's actual mother?", "kya gangadhar hi shaktimaan hai?"], model='llama3-70b')
 
 # pass other parameters
-groq(
+agroq(
     'Why am I awake at 2.30 AM?',
-    model='llama3-70b', 
+    model_list='llama3-70b', 
     cookie_file="./groq_cookie.json", 
     headless=False,
     save_dir='./newresponses/',
-    save_output=True, 
     system_prompt="you are jarvis/vision assistant from Ironman and marvel movie, and assistant of me, call me sir",
     print_output=True
     )
@@ -63,22 +57,33 @@ groq(
 ## help
 
 ```
-groq-on --help
+agroq --help
+usage: agroq [-h] [--model_list MODEL_LIST [MODEL_LIST ...]] [--cookie_file COOKIE_FILE] [--system_prompt SYSTEM_PROMPT] [--headless HEADLESS] [--output_dir OUTPUT_DIR] [--temperature TEMPERATURE]
+             [--max_tokens MAX_TOKENS] [--n_workers N_WORKERS]
+             queries [queries ...]
 
 positional arguments:
-  queries               one or alot of quoted string like \
-                        'what is the purpose of life?'\
-                        'why everyone hates meg griffin?'
+  queries               one or more quoted string like 'what is the purpose of life?' 'why everyone hates meg griffin?'
 
 options:
   -h, --help            show this help message and exit
-  --model MODEL         Available models are gemma-7b llama3-70b llama3-8b mixtral-8x7b
+  --model_list MODEL_LIST [MODEL_LIST ...]
+                        Available models are gemma-7b-it llama3-70b-8192 llama3-8b-8192 mixtral-8x7b-32768, e.g enter as --model_list 'llama3-8b' 'gemma-7b'
   --cookie_file COOKIE_FILE
-  --headless            set true to not see the browser, e.g --headless True/False
-  --save_output         set true to save the groq output with its query name.json
+                        looks in current directory by default for groq_cookie.json. If not found, You will have to login when the browswer opens under 120 seconds. It's one time thing
+  --system_prompt SYSTEM_PROMPT
+                        System prompt to be given to the llm model. Its like 'you are samuel l jackson as my assistant'. Default is None.
+  --headless HEADLESS   set true to not see the browser
   --output_dir OUTPUT_DIR
                         Path to save the output file. Defaults to current working directory.
-  --reset_cookies       Deletes the old cookies, need to login again
+  --temperature TEMPERATURE
+                        Temperature value
+  --max_tokens MAX_TOKENS
+                        Maximum number of tokens (upper limit)
+  --n_workers N_WORKERS
+                        Number of browers instances to work simultaneously. Keep between 1-8 (eats up ram)
+
+
 ```
 
 ## TODO (Need Help)

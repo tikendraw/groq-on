@@ -1,5 +1,8 @@
 import logging
 import logging.config
+from .groq_config import groq_config_folder
+import os
+
 
 LOGGING_CONFIG = {
     "version": 1,
@@ -14,7 +17,7 @@ LOGGING_CONFIG = {
         "file": {
             "level": "DEBUG",
             "class": "logging.FileHandler",
-            "filename": "app.log",
+            "filename": os.path.join(groq_config_folder, "app.log"),
             "formatter": "detailed",
         },
         "console": {

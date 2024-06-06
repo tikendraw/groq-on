@@ -1,5 +1,10 @@
 # Changelog
 
+## 06-06-2024
+* fixing selectors
+* No need to wait after logging in, till timeout
+* feature: --reset_login to clear the old cookie file
+
 ## 22-05-2024
 * Adding async functionality
 

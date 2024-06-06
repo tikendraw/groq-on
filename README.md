@@ -90,12 +90,12 @@ options:
 
 ## TODO (Need Help)
 
-* [ ] Set System Prompt
+* [x] Set System Prompt
 * [ ] Keep updated
 * [ ] Add something
 * [ ] Use Better parser
-* [ ] Use color for better Visual / Rich text formatting
-* [ ] Add logger
+* [x] Use color for better Visual / Rich text formatting
+* [x] Add logger
 * [ ] Multiround chat
 
 ## Contribution

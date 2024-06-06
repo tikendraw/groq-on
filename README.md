@@ -82,6 +82,8 @@ options:
                         Maximum number of tokens (upper limit)
   --n_workers N_WORKERS
                         Number of browers instances to work simultaneously. Keep between 1-8 (eats up ram)
+  --reset_login RESET_LOGIN
+                        If set the flag, it will delete the groq_cookie.json file and you have to login again
 
 
 ```

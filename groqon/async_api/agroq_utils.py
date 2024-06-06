@@ -6,7 +6,8 @@ import time
 from html import unescape
 from pathlib import Path
 from typing import Any
-from printt import printt, disable_printt
+
+from printt import disable_printt, printt
 
 disable_printt()
 from playwright.async_api import Page
@@ -16,16 +17,16 @@ from ..element_selectors import (
     CLEAR_CHAT_BUTTON,
     END_TEXT_SELECTOR,
     MODEL_DROPDOWN_SELECTOR,
+    MODEL_NAME_SELECTOR,
     QUERY_INPUT_SELECTOR,
-    SYSTEM_PROMPT_BUTTON,
-    SYSTEM_PROMPT_TEXTAREA,
     QUERY_SELECTOR,
     RESPONSE_SELECTOR,
-    MODEL_NAME_SELECTOR,
+    SYSTEM_PROMPT_BUTTON,
+    SYSTEM_PROMPT_TEXTAREA,
 )
 from ..groq_config import modelindex
-from ..parsing import extract_to_markdown
 from ..logger import get_logger
+from ..parsing import extract_to_markdown
 
 logger = get_logger(__name__)
 
@@ -186,7 +187,7 @@ def get_cookie(file_path: str) -> Any:
         return json.load(f)
 
 
-def file_exists(file_path: str) -> bool:
+def file_exists(file_path: str=None) -> bool:
     """
     Checks if a file exists at the specified path.
 
@@ -196,7 +197,8 @@ def file_exists(file_path: str) -> bool:
     Returns:
         bool: True if the file exists, False otherwise.
     """
-    return Path(file_path).is_file()
+    if file_path is not None:
+        return Path(file_path).is_file()
 
 
 async def clear_chat(page: Page) -> None:

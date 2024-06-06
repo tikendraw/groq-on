@@ -7,7 +7,8 @@ import os
 import re
 from contextlib import asynccontextmanager
 from datetime import datetime
-from functools import partial, lru_cache, cache
+from functools import partial, cache
+from pprint import pprint
 from pathlib import Path
 from typing import Any, Dict, List, Union
 from line_profiler import profile
@@ -17,12 +18,11 @@ from playwright.async_api import Page, Response, Route, async_playwright
 from termcolor import colored
 
 from ..element_selectors import (
-    QUERY_INPUT_SELECTOR,
     QUERY_SUBMIT_SELECTOR,
+    SIGNIN_BUTTON_SELECTOR,
     CHAT_INPUT_SELECTOR,
 )
 from ..groq_config import (
-    AUTHENTICATION_URL,
     DEFAULT_MODEL,
     GROQ_COOKIE_FILE,
     MODEL_JSON_FILE,
@@ -49,27 +49,31 @@ async def login_user(p: async_playwright, url: str, cookie_file: str) -> dict:
     context = await browser.new_context()
     page = await context.new_page()
 
-    await page.route("**/**/v1/sessions/authenticate/**/**", check_login)
     await page.goto(url, timeout=60_000)
 
-    await page.wait_for_timeout(1000 * 100)  # 100 sec to login
+    sec = 100
+    while sec > 0:
+        await page.wait_for_timeout(1000)
+        sec -= 1
+        button_text = "Sign in to Groq"
+        
+        if 'groq.com' in page.url:
+            try:
+                button_text = page.locator(SIGNIN_BUTTON_SELECTOR)
+                button_text = await button_text.inner_text()
+            except Exception as e:
+                logger.debug("Into google login page ", exc_info=e)
+            
+        if "sign in" not in button_text.lower().strip():
+            # text says : Sign in to Groq
+            sec = 0
+
     cookie = await context.cookies()
     await save_cookie(cookie, cookie_file)
     logger.debug("login page closed!")
     # ic("in login_user func  : ", now())
+    await page.close()
     return cookie
-
-
-# @profile
-async def check_login(route: Route):
-    # ic("in check_login func  : ", now())
-    if route.request.url == AUTHENTICATION_URL:
-        response = await route.fetch()
-
-        # print(colored(f"****: {response.body().decode('utf-8')}", "red"))
-        await route.continue_()
-    else:
-        await route.abort()
 
 
 # @profile
@@ -140,9 +144,9 @@ async def do_query(page: Page, user_dict: dict, queue: asyncio.Queue) -> None:
     # ic("in do_query func  : ", now())
 
     try:
-        textarea = page.locator(CHAT_INPUT_SELECTOR)
+        textarea = await page.wait_for_selector(CHAT_INPUT_SELECTOR)
 
-        n_try = 10
+        n_try = 20
         # Check if the textarea is disabled
         is_disabled = await textarea.is_disabled()
 
@@ -160,7 +164,7 @@ async def do_query(page: Page, user_dict: dict, queue: asyncio.Queue) -> None:
                 await queue.put(
                     {
                         "query": user_dict.get("query"),
-                        "response_text": "timeout chat is disabled",
+                        "response_text": "chat is disabled, no query submitted",
                         "time_stats": {},
                         "tokens_per_second": 0,
                         "model": user_dict.get("model", DEFAULT_MODEL),
@@ -170,8 +174,7 @@ async def do_query(page: Page, user_dict: dict, queue: asyncio.Queue) -> None:
                 return
 
         if not is_disabled:
-            await page.wait_for_selector(QUERY_INPUT_SELECTOR, timeout=60 * 1000)
-            await page.locator(QUERY_INPUT_SELECTOR).fill(user_dict.get("query"))
+            await textarea.fill(user_dict.get("query"))
             await page.locator(QUERY_SUBMIT_SELECTOR).click()
             # await page.wait_for_event("response")
             # await page.screenshot(path="after_submit.png", full_page=True)
@@ -190,9 +193,8 @@ async def do_query(page: Page, user_dict: dict, queue: asyncio.Queue) -> None:
             }
         )
 
-
 @cache
-# #@profile
+#@profile
 def get_model_from_name(model: str) -> str:
     """Get the full model name from the given partial name."""
 
@@ -219,9 +221,18 @@ async def worker_task(
     temperature: float,
     max_tokens: int,
     queue: asyncio.Queue,
+    reset_login: bool = False,
 ):
     """Worker task to process a subset of queries."""
     # ic("in worker_task func  : ", now())
+
+    if reset_login:
+        try:
+            os.remove(cookie_file)
+        except Exception as e:
+            logger.critical(f"exception while deleting cookie file, delete manually to reset login. {cookie_file} ", exc_info=e)
+
+
     responses = []
     async with groq_context(cookie_file=cookie_file, headless=headless) as context:
         page = await context.new_page()
@@ -293,6 +304,7 @@ async def _agroq(
     temperature: float = 0.1,
     max_tokens: int = 2048,
     n_workers: int = 2,
+    reset_login: bool = False,
 ) -> List[Dict[str, Any]]:
     """Main function to perform queries and process responses."""
     # ic("in _agroq func", now())
@@ -327,6 +339,7 @@ async def _agroq(
             temperature=temperature,
             max_tokens=max_tokens,
             queue=queue,
+            reset_login=reset_login,
         )
         for i in range(n_workers)
     ]
@@ -349,6 +362,7 @@ def agroq(
     temperature: float = 0.1,
     max_tokens: int = 2048,
     n_workers: int = 2,
+    reset_login: bool = False,
 ) -> List[Dict[str, Any]]:
     """Main function to perform queries and process responses."""
     # ic("in agroq func", now())
@@ -365,6 +379,7 @@ def agroq(
             temperature=temperature,
             max_tokens=max_tokens,
             n_workers=n_workers,
+            reset_login=reset_login,
         )
     )
 
@@ -380,6 +395,11 @@ def print_model_response(model_response: Dict[str, Any]):
     )
     print(
         colored(
+            f"Model : {model_response.get('model', 0)}", "magenta"
+        )
+    )
+    print(
+        colored(
             f"Speed : {model_response.get('tokens_per_second', 0):.2f} T/s", "magenta"
         )
     )
@@ -389,14 +409,6 @@ def print_model_response(model_response: Dict[str, Any]):
 # @profile
 async def write_json(data: Union[Dict, str], filename: str):
     """Write dictionary or JSON string to a file."""
-    # ic("in write_json func", now())
-
-    if not isinstance(data, dict):
-        try:
-            data = json.loads(data)
-        except json.JSONDecodeError as e:
-            logger.exception("Exception in write_json", exc_info=e)
-            return
 
     async with aiofiles.open(filename, "w") as f:
         await f.write(json.dumps(data, indent=4))
@@ -440,10 +452,9 @@ async def handle_streamed_response(response: Response, query: str) -> Dict[str, 
     try:
         body_bytes = await response.body()
         body_str = body_bytes.decode("utf-8")
+        
         lines = body_str.split("\n\n")
 
-        raw_lines = []
-        # await write_json(body_str, filename=f"raw_response {query}.json")
         error = False
         for line in lines:
             if line.strip() == "data: [DONE]":
@@ -466,29 +477,27 @@ async def handle_streamed_response(response: Response, query: str) -> Dict[str, 
             elif line.startswith('{"error"'):
                 error = True
 
-                error_json = json.loads(line)
-                extracted_error_json = extract_rate_limit_info(line)
-                logger.critical(f"{query} {extracted_error_json}")
+                error_json_ = json.loads(line)
+                error_json = error_json_.get('error')
+                accumulated_content += error_json.get("message", "Error")
+                stats = error_json_
 
-                if extracted_error_json.get("code") == "model_not_active":
-                    accumulated_content = (
-                        error_json.get("error").get("message", "Error")
-                        + " "
-                        + f"Choose Models from : {modelindex} "
-                    )
-                else:
-                    accumulated_content = error_json.get("error").get(
-                        "message", "Error"
-                    )
+                if error_json.get("code") == "model_not_active":
+                    accumulated_content += f"\nChoose Models from : {modelindex} "
+                    
+                elif error_json.get('code') == 'rate_limit_exceeded':
+                    accumulated_content += "\nWait kar le thoda."
+                    
+                else:   
+                    accumulated_content += "\nUnknown Error"
 
-                model = extracted_error_json.get("model", "Error")
-                stats = extracted_error_json
 
+                logger.error("Error while handling streamed response from server", exc_info=error_json)
+                
             else:
-                raw_lines.append(line)
-
-        if raw_lines:
-            accumulated_content += "\n".join(raw_lines)
+                error = True
+                logger.error("Unknown Error while handling streamed response from server", exc_info=body_str )
+                accumulated_content += "\n" + str(line)
 
         if stats and not error:
             try:
@@ -598,7 +607,6 @@ async def handle_chat_completions(route: Route, *args, **kwargs):
                 ],
             }
             # print("start post data : ", now())
-
             # print(colored(f"***** >>> this is going as post data, {modified_data}", "green"))
             await route.continue_(post_data=json.dumps(modified_data))
         else:
@@ -676,12 +684,21 @@ def main() -> None:
         help="Number of browers instances to work simultaneously. Keep between 1-8 (eats up ram)",
     )
 
+    # a flag to reset the login
+    parser.add_argument(
+        "--reset_login",
+        action="store_true",
+        help="If true, will delete the groq_cookie.json file and login again",
+        
+    )
+
+
     args = parser.parse_args()
 
-    def check_headless(x):
+    def clean(x):
         return x.lower().strip() == "true"
 
-    headless = check_headless(args.headless)
+    headless = clean(args.headless)
 
     out = agroq(
             cookie_file=args.cookie_file,
@@ -694,5 +711,6 @@ def main() -> None:
             temperature=args.temperature,
             max_tokens=args.max_tokens,
             n_workers=args.n_workers,
+            reset_login=args.reset_login
         )
     

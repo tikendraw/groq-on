@@ -1,10 +1,11 @@
 import json
 import os
 from pathlib import Path
+
 home_dir = os.path.expanduser("~")
 groq_config_folder = os.path.join(home_dir, ".groqon")
 GROQ_COOKIE_FILE = Path(groq_config_folder) / "groq_cookie.json"
-MODEL_JSON_FILE = Path(groq_config_folder) / "models.json"
+MODEL_LIST_FILE = Path(groq_config_folder) / "models.json"
 
 
 URL = "https://groq.com/"
@@ -23,7 +24,7 @@ GLOBAL_LIMITS = {
 from .logger import get_logger # noqa
 logger = get_logger(__name__)
 
-def get_model_ids(models_file=MODEL_JSON_FILE):
+def get_model_ids(models_file=MODEL_LIST_FILE):
     """
     Reads the model IDs from the models.json file and populates the modelindex list.
 

@@ -25,7 +25,7 @@ from ..element_selectors import (
 from ..groq_config import (
     DEFAULT_MODEL,
     GROQ_COOKIE_FILE,
-    MODEL_JSON_FILE,
+    MODEL_LIST_FILE,
     URL,
     modelindex,
 )
@@ -422,7 +422,7 @@ async def get_models_from_api_response(route: Route):
         if "/openai/v1/models" in route.request.url:
             response = await route.fetch()
             data = await response.json()
-            await write_json(data, filename=MODEL_JSON_FILE)
+            await write_json(data, filename=MODEL_LIST_FILE)
             GOT_MODELS = True
 
     await route.continue_()

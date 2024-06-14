@@ -17,6 +17,7 @@ curl\ api\ groq\ com.txt
 *.png
 ./requests.txt
 jj.py
+ii.py
 '...'
 ./hars/
 hars/*

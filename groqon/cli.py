@@ -1,14 +1,26 @@
-from .async_api.agroq_server import AgroqServer
-from .async_api.schema import AgroqServerConfig, AgroqClientConfig
-from .async_api.agroq_client import AgroqClient
-from .groq_config import GROQON_CONFIG_FILE, modelindex
-from .utils import save_config, load_config
-from pathlib import Path
-import click
 import asyncio
+from pathlib import Path
 
+import click
+
+from .async_api.agroq_client import AgroqClient
+from .async_api.agroq_server import AgroqServer
+from .async_api.schema import AgroqClientConfig, AgroqServerConfig
+from .groq_config import (
+    DEFAULT_MODEL,
+    GROQON_CONFIG_FILE,
+    MAX_TOKENS,
+    MODEL_LIST_FILE,
+    STREAM,
+    SYSTEM_PROMPT,
+    TEMPERATURE,
+    TOP_P,
+    modelindex,
+)
+from .utils import load_config, save_config
 
 config = load_config(config_file=GROQON_CONFIG_FILE.absolute())
+CLIENT_CONFIG = config.get("client")
 DEFAULTS = config.get("defaults")
 
 
@@ -18,35 +30,67 @@ DEFAULTS = config.get("defaults")
 def one(ctx: click.Context):
     """ Start Groqon CLI """
     ctx.ensure_object(dict)
-    ctx.obj['config']=config
-    ctx.obj['defaults']=DEFAULTS
-    ctx.obj['modelindex']=modelindex
-    ctx.obj['server_running']=0
-    
-    if ctx.obj['server_running']==1:
-        print('server running')
+    ctx.obj['config'] = config
+    ctx.obj['defaults'] = DEFAULTS
+    ctx.obj['modelindex'] = modelindex
+    ctx.obj['server_running'] = False
+
 
 @click.command()
 @click.argument("query", type=str)
+@click.option("--save_dir",     "-s", type=str, default=None,  help="file path to save the generated response file, not saved if not provided")
+@click.option("--models",       "-m",   default=','.join(DEFAULTS.get("models")),  type=str,  help=f"Comma separated(no spaces) list of models to be used, pick from {modelindex}(pick llms only).")
+@click.option("--system_prompt","-sp",  default=CLIENT_CONFIG.get("system_prompt"),type=str,  help="set False to see the browser window, (you may not want to see)")
+@click.option("--print_output", "-p",   default=True,                              type=bool, help="number of windows to serve as query workers. (more windows==more memory usage==faster query if multiple queries are running)")
+@click.option("--temperature",  "-t",   default=CLIENT_CONFIG.get("temperature"),  type=float,help="Reset the login information in cookie file, you have to login again when window opens")
+@click.option("--max_tokens",   "-mt",  default=CLIENT_CONFIG.get("max_tokens"),   type=int,  help="WARNING: server model config file, No not change this, NOT FOR USER.")
+@click.option("--stream",       "-s",   default=CLIENT_CONFIG.get("stream"),       type=bool, help="Set True to see verbose output")
+@click.option("--top_p",        "-tp",  default=CLIENT_CONFIG.get("top_p"),        type=int,  help="Set True to see verbose output")
+@click.option("--stop_server",  "-ss",  default=False,                             type=bool, help="Stop server after query")
 @click.pass_context
-def query(ctx:click.Context, query:str):
+def query(
+    ctx:click.Context, 
+    query:str,
+    save_dir:Path,
+    models:str|list[str],
+    system_prompt:str,
+    print_output:bool,
+    temperature:float,
+    max_tokens:int,
+    stream:bool,
+    top_p:int,
+    stop_server:bool
+    ):
+    
+    if isinstance(models, str):
+        models = models.split(',')
+        print('model is string')
+    
     config = AgroqClientConfig(
-        **ctx.obj['defaults']
+        models = models,
+        save_dir = save_dir,
+        system_prompt = system_prompt,
+        print_output = print_output,
+        temperature = temperature,
+        max_tokens = max_tokens,
+        top_p = top_p,
+        stream = stream,
+        stop_server = stop_server,
     )
-    client = AgroqClient(config)
-    asyncio.run(client.multi_query_async(**ctx.obj['query']))
+    client = AgroqClient(config=config)
+    asyncio.run(client.multi_query_async(query=query))
+
 
 
 
 def run_server(ctx):
-    config = AgroqServerConfig(
-        **ctx.obj['defaults']
-    )
+    config = AgroqServerConfig(**ctx.obj['defaults'])
     server = AgroqServer(config)
+    ctx.obj['server'] = server
     
     async def main():
         await server.astart()
-        ctx.obj['server_running']=1
+        ctx.obj['server_running'] = True
                 
     asyncio.run(main())
 
@@ -56,6 +100,23 @@ def run_server(ctx):
 def serve(ctx: click.Context):
     run_server(ctx)
 
+
+@click.command()
+@click.pass_context
+def stop_server(ctx: click.Context):
+    if not ctx.obj['server_running']:
+        click.echo("Server is not running.")
+        return
+    
+    async def stop():
+        server = ctx.obj['server']
+        await server.astop()
+        ctx.obj['server_running'] = False
+        click.echo("Server stopped successfully.")
+    
+    asyncio.run(stop())
+    
+    
 @click.command()
 @click.option("--cookie_file",          "-cf", default=DEFAULTS.get("cookie_file"), type=click.Path(exists=True),   help="Set cookie file, provide path to cookie file path, default is ~/.groqon/groq_cookie.json.")
 @click.option("--models",               "-m",  default=','.join(DEFAULTS.get("models")),       type=str,                help=f"Comma separated(no spaces) list of models to be used, pick from {modelindex}(pick llms only).")
@@ -103,3 +164,5 @@ def config(cookie_file:Path          ,#= DEFAULTS.get("cookie_file"),
 
 one.add_command(config)
 one.add_command(serve)
+one.add_command(query)
+

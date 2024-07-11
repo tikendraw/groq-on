@@ -1,45 +1,88 @@
 # groq_utils.py
 
 import json
-import re
+import math
+from datetime import datetime
+from functools import cache
 from pathlib import Path
-from typing import Any
-from termcolor import colored
+from typing import Any, Dict
 
+import aiofiles
 from tqdm import tqdm
 
-from ..groq_config import modelindex, DEFAULT_MODEL
+from ..groq_config import DEFAULT_MODEL, modelindex
 from ..logger import get_logger
-from typing import Dict, Union
-import aiofiles
-from functools import cache
-from datetime import datetime
-from .schema import ResponseModel
+
+from termcolor import colored
+from .schema import APIResponseModel
+
 logger = get_logger(__name__)
 
-async def save_dict_to_json(output_dict: Dict[str, Any], save_dir: str, file_name: str):
-    """Save output dictionary to a JSON file."""
 
-    save_dir_path = Path(save_dir)
-    save_dir_path.mkdir(parents=True, exist_ok=True)
+async def async_generator_from_iterables(*iterables):
+    """
+    Generates tuples of corresponding elements from multiple iterables.
 
-    file_name = "".join(c for c in file_name if c.isalnum() or c.isspace()).strip()
+    Args:
+        *iterables: A variable number of iterables to iterate over.
+
+    Yields:
+        A tuple containing the corresponding elements from each iterable.
+    """
+    
+    # Find the shortest iterable to determine the number of iterations
+    min_length = min(len(iterable) for iterable in iterables)
+
+    # Iterate over the shortest iterable
+    for i in range(min_length):
+        yield tuple(iterable[i] for iterable in iterables) 
+
+def clean_name(name:str):
+    """remove non-alphanumeric characters from string"""
+    return "".join(c for c in name if c.isalnum() or c.isspace()).strip()
+
+def shorten_file_name(file_name: str) -> str:
+    """Shorten the file name to 10 characters."""
     file_name_split = file_name.split(" ")
-
     if len(file_name_split) > 10:
         file_name = " ".join(file_name_split[:10])
+    return file_name
 
-    json_file_path = save_dir_path / f"{file_name}.json"
+async def write_dict_to_json(output_dict: Dict[str, Any], directory: str|Path, file_name: str|Path):
+    """Save output dictionary to a JSON file."""
 
-    async with aiofiles.open(json_file_path, "w") as f:
-        await f.write(json.dumps(output_dict, indent=4))
+    if isinstance(file_name, str):
+        file_name = Path(file_name)
+        
+    if file_name.suffix == "":
+        file_name = file_name.stem + ".json"
+    
+    await write_str_to_file(json.dumps(output_dict, indent=4), directory, file_name)
+        
 
-async def write_json(data: Union[Dict, str], filename: str):
-    """Write dictionary or JSON string to a file."""
+async def write_str_to_file(content:str, directory: str|Path, file_name: str|Path):
+    """saves content to given file name in given directory asynchronously"""
+    
+    if isinstance(directory, str):
+        directory = Path(directory)
+    if isinstance(file_name, str):
+        file_name = Path(file_name)
+    
+    directory.mkdir(parents=True, exist_ok=True)
+    file_name, suffix = file_name.stem, file_name.suffix
+    file_name = clean_name(file_name)
+    file_name = shorten_file_name(file_name)
 
-    async with aiofiles.open(filename, "w") as f:
-        await f.write(json.dumps(data, indent=4))
-
+    # check if file name has some extension and add .txt if not
+    if suffix == "":
+        suffix = ".txt"
+    
+    full_name = file_name+suffix
+    file_path = directory / full_name
+    
+    async with aiofiles.open(file_path, "w") as f:
+        await f.write(content)
+        
 
 def now() -> str:
     """Returns the current time as a string."""
@@ -59,63 +102,12 @@ def get_model_from_name(model: str) -> str:
     return DEFAULT_MODEL
 
 
-def extract_rate_limit_info(data):
-    json_str = json.dumps(data) if isinstance(data, dict) else data
-    # Define regular expressions
-    model_regex = r"model\s`(.*?)`"
-    model_limit_regex = r"Limit\s(\d+)"
-    wait_time_regex = r"try again in\s(\d+)ms"
-    type_regex = r"type\":\s*\"(.*?)\""
-    code_regex = r"code\":\s*\"(.*?)\""
-
-    # Extract values using regular expressions
-    model = re.search(model_regex, json_str)
-    model_limit = re.search(model_limit_regex, json_str)
-    wait_time = re.search(wait_time_regex, json_str)
-    type_val = re.search(type_regex, json_str)
-    code_val = re.search(code_regex, json_str)
-
-    # Create a dictionary with extracted values
-    return {
-        "model": model.group(1) if model else None,
-        "model_limit (RPM)": int(model_limit.group(1)) if model_limit else None,
-        "wait_time (ms)": int(wait_time.group(1)) if wait_time else None,
-        "type": type_val.group(1) if type_val else None,
-        "code": code_val.group(1) if code_val else None,
-    }
+def x_eq_len_of_y(x:list[str], y:list[str]) -> list[str]:
+    x *= math.ceil(len(y) / len(x))
+    return x
 
 
-def print_model_response(response: ResponseModel):
-    """Print the model response."""
-    print(colored(f"query : {response.query}", "green"))
-    print(
-        colored(
-            f"response : {response.response_text}",
-            "yellow",
-        )
-    )
-    print(
-        colored(
-            f"Model : {response.model}", "magenta"
-        )
-    )
-    print(
-        colored(
-            f"Speed : {response.tokens_per_second:.2f} T/s", "magenta"
-        )
-    )
-    if response.status_code != 200:
-    
-        print(
-            colored(
-                f"status code: {response.status_code}",
-                'red'
-            )
-        )
-    print()
-
-
-async def save_cookie(cookie: dict | str | list[dict], file_path: str) -> None:
+async def save_cookie(cookie: dict|list[dict], file_path: str) -> None:
     file_path = Path(file_path)
     with open(file_path, "w") as f:
         json.dump(cookie, f)
@@ -134,3 +126,28 @@ def file_exists(file_path: str=None) -> bool:
 
 def show_progress_bar(iterable, desc: str) -> Any:
     return tqdm(iterable, desc=desc)
+
+
+def calculate_tokens_per_second(usage: Dict[str, Any]) -> float:
+    """Calculate tokens per second from usage statistics."""
+    try:
+        return usage["completion_tokens"] / usage["completion_time"]
+    except (KeyError, ZeroDivisionError):
+        return 0
+
+
+def ccc(x, *args, end=None, **kwargs):
+    print(colored(x,*args, **kwargs), end=end)
+
+def print_model_response(response: dict):
+    """Print the model response."""
+    
+    def print_color(dictt, key, default, color):
+        print(colored(f"{key} : {dictt.get(key, default)}", color))
+
+    response = APIResponseModel(**response)
+    ccc(f"Response: {response.choices[0].message.content}", 'yellow')
+    ccc(f"Model: {response.model}", 'magenta')
+    ccc(f"TOK/s: {calculate_tokens_per_second(response.usage)}", 'magenta')
+    
+    print()

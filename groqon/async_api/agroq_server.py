@@ -1,5 +1,6 @@
 import asyncio
 import json
+import time
 from asyncio import Queue, QueueEmpty
 from typing import Any, Dict, List
 
@@ -13,6 +14,7 @@ from playwright.async_api import (
     Route,
     async_playwright,
 )
+from pydantic import ValidationError
 from termcolor import colored
 
 from ..element_selectors import (
@@ -31,16 +33,23 @@ from ..groq_config import (
 from ..logger import get_logger
 from ..utils import cc, log_function_call
 from .agroq_utils import (
-    file_exists, 
+    file_exists,
     get_cookie,
     now,
     save_cookie,
     write_dict_to_json,
 )
-
-from .schema import AgroqServerConfig, APIRequestModel, APIResponseModel, ChoiceModel, ErrorResponse, MessageModel, RequestModel, ResponseModel, Xgroq
-from pydantic import ValidationError
-import time
+from .schema import (
+    AgroqServerConfig,
+    APIRequestModel,
+    APIResponseModel,
+    ChoiceModel,
+    ErrorResponse,
+    MessageModel,
+    RequestModel,
+    ResponseModel,
+    Xgroq,
+)
 
 logger = get_logger(__name__)
 ic.disable()
@@ -90,7 +99,7 @@ class AgroqServer:
                 self.server = await asyncio.start_server(self.handle_server_request, '127.0.0.1', self._PORT)
 
                 addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
-                logger.debug(f'Serving on {addrs}')
+                logger.info(f'Serving on {addrs}')
 
                 async with self.server:
                     try:
@@ -113,7 +122,7 @@ class AgroqServer:
         data = await reader.read(99999) # TODO: find something that gets all the incoming data
 
 
-        logger.debug(f'received request: server side : {data.decode()}')
+        logger.info(f'>>>>>>>> request: server side : {data.decode()}')
 
         # # Closing if endtoken is received
         if ENDTOKEN in data.decode() and self.request_queue.empty():
@@ -137,7 +146,7 @@ class AgroqServer:
         response =  await self.output_queue.get()
                 
         if response:
-            logger.debug(f'sending response: server side : {response.model_dump()}')
+            logger.info(f'<<<<<<< response: server side : {response.model_dump()}')
             response_byte = self.model_to_byte(response)            
             writer.write(response_byte)
             await writer.drain()

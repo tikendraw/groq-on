@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
-from .utils import save_config, get_model_ids
+
+from .utils import get_model_ids, save_config
 
 home_dir = os.path.expanduser("~")
 groq_config_folder = os.path.join(home_dir, ".groqon")
@@ -35,6 +36,13 @@ if not GROQON_CONFIG_FILE.exists():
             'server_model_configs': str(MODEL_LIST_FILE.absolute()),
             'verbose': False,
             'print_output': True
+        },
+        'client':{
+            'system_prompt': SYSTEM_PROMPT,
+            'temperature': TEMPERATURE,
+            'max_tokens': MAX_TOKENS,
+            'top_p': TOP_P,
+            'stream': STREAM
         }
     }
     

@@ -1,5 +1,10 @@
 # Changelog
 
+## 11-07-2024
+* added server client feature
+* processes queries asynchronosly
+* bug fixes
+
 ## 06-06-2024
 * fixing selectors
 * No need to wait after logging in, till timeout

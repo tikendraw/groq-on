@@ -2,8 +2,8 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List
-
+from typing import Any, Dict, List, Union
+from pydantic import BaseModel
 from ..groq_config import PORT, modelindex
 from ..logger import get_logger
 from ..utils import cc, log_function_call
@@ -20,50 +20,47 @@ from .schema import AgroqClientConfig, RequestModel
 logger = get_logger(__name__)
 
 
-class AgroqClient:
+class AgroqClient(BaseModel):
     """Checkout this url to get help with model selection based on tasks: https://artificialanalysis.ai/providers/groq """
-    def __init__(self, config: AgroqClientConfig):
-        self.config = config
-        self._PORT = PORT
+    config: AgroqClientConfig
+    _PORT: int = PORT
 
     # @log_function_call
     async def multi_query_async(
         self,
-        query_list: List[str],
-        model_list: List[str] = None, 
-        save: bool = False,
-        system_prompt_list: List[str] = None, 
-        temperature_list: List[float] = None,
-        max_tokens_list: List[int] = None,
+        query: Union[str, List[str]],
+        model: Union[str, List[str]] = None, 
+        system_prompt: Union[str, List[str]] = None, 
+        temperature: Union[float, List[float]] = None,
+        max_tokens: Union[int, List[int]] = None,
+        top_p: Union[int, List[int]] = None,
         stream: bool = True,
     ) -> list[Dict[str, Any]]:
 
-        if model_list is None:
-            model_list = modelindex
-        if system_prompt_list is None:
-            system_prompt_list = [self.config.system_prompt]
-        if temperature_list is None:
-            temperature_list = [self.config.temperature]
-        if max_tokens_list is None:
-            max_tokens_list = [self.config.max_tokens]
-        if isinstance(model_list, str):
-            model_list = [model_list]
-            
-        stream = [stream]* len(query_list)
+        # Convert single string inputs to lists
+        query = [query] if isinstance(query, str) else query
+        model = [model] if isinstance(model, str) else (model or modelindex)
+        system_prompt = [system_prompt] if isinstance(system_prompt, str) else (system_prompt or [self.config.system_prompt])
+        temperature = [temperature] if isinstance(temperature, (int, float)) else (temperature or [self.config.temperature])
+        max_tokens = [max_tokens] if isinstance(max_tokens, int) else (max_tokens or [self.config.max_tokens])
+        top_p = [top_p] if isinstance(top_p, int) else (top_p or [self.config.top_p])
+        
+        
 
-        model_list = [get_model_from_name(name) for name in model_list]
+        model = [get_model_from_name(name) for name in model]
 
-        model_list = x_eq_len_of_y(x=model_list, y=query_list)
-        system_prompt_list = x_eq_len_of_y(x=system_prompt_list, y=query_list)
-        temperature_list = x_eq_len_of_y(x=temperature_list, y=query_list)
-        max_tokens_list = x_eq_len_of_y(x=max_tokens_list, y=query_list)
-        print(f'got {len(query_list)} queries')
+        model = x_eq_len_of_y(x=model, y=query)
+        system_prompt = x_eq_len_of_y(x=system_prompt, y=query)
+        temperature = x_eq_len_of_y(x=temperature, y=query)
+        max_tokens = x_eq_len_of_y(x=max_tokens, y=query)
+        
+        print(f'got {len(query)} queries')
 
 
         responses = []
 
 
-        async for q, m, sp, t, mt, st in async_generator_from_iterables(query_list, model_list, system_prompt_list, temperature_list, max_tokens_list, stream):
+        async for q, m, sp, t, mt in async_generator_from_iterables(query, model, system_prompt, temperature, max_tokens):
             try:
                 output = await self.send_requestmodel(
                     self.make_request_model(
@@ -72,7 +69,7 @@ class AgroqClient:
                         system_prompt=sp,
                         temperature=t,
                         max_tokens=mt,
-                        stream=st
+                        stream=stream
                     )
                 )
                 if self.config.print_output:

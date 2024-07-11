@@ -1,41 +1,64 @@
 
-from pydantic import BaseModel
-from pathlib import Path
-from typing import List, Union, Dict, Any
-from ..groq_config import GROQ_COOKIE_FILE, DEFAULT_MODEL, MODEL_LIST_FILE
 import uuid
+from pathlib import Path
+from typing import Any, Dict, List, Union
 
-TOP_P = 1
-STREAM = True
-TEMPERATURE = 0.1
-MAX_TOKENS = 2048
-SYSTEM_PROMPT = "Please try to provide useful, helpful and actionable answers."
+from pydantic import BaseModel
+
+from ..groq_config import (
+    DEFAULT_MODEL,
+    GROQ_COOKIE_FILE,
+    MAX_TOKENS,
+    MODEL_LIST_FILE,
+    STREAM,
+    SYSTEM_PROMPT,
+    TEMPERATURE,
+    TOP_P,
+)
 
 
-class AgroqConfig(BaseModel):
-    query_list: List[str] = None
+class ErrorModel(BaseModel):
+    message: str
+    type: str
+    code: str
+
+class ErrorResponse(BaseModel):
+    error: ErrorModel
+        
+class AgroqServerConfig(BaseModel):
     cookie_file: str = GROQ_COOKIE_FILE
     models: List[str] = [DEFAULT_MODEL]
     headless: bool = True
+    n_workers: int = 2
+    reset_login: bool = False
+    server_model_configs: str = MODEL_LIST_FILE
+    verbose:bool = True
+    print_output:bool=True
+
+class AgroqClientConfig(BaseModel):
+    models: List[str] = [DEFAULT_MODEL]
     save_dir: Union[str, Path] = None
     system_prompt: str = SYSTEM_PROMPT
     print_output: bool = True
     temperature: float = TEMPERATURE
     max_tokens: int = MAX_TOKENS
-    n_workers: int = 2
     top_p:int = TOP_P
     stream: bool = STREAM
-    reset_login: bool = False
     server_model_configs: str = MODEL_LIST_FILE
-    verbose:bool = True
-    keep_running:bool = False
+    stop_server:bool = False
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        if self.save_dir is not None:
+            self.save_dir = Path(self.save_dir)
+            self.save_dir.mkdir(parents=True, exist_ok=True)
 
 class MessageModel(BaseModel):
     content: str
     role: str
 
 class RequestModel(BaseModel):
-    id: str = uuid.uuid4().hex
+    id: str = None
     query: str
     model: str = DEFAULT_MODEL
     system_prompt: str = SYSTEM_PROMPT
@@ -83,6 +106,27 @@ class APIRequestModel(BaseModel):
             stream=request_model.stream
         )
 
+
+class ChoiceModel(BaseModel):
+    index: int
+    message: MessageModel
+    logprobs: Any = None
+    finish_reason: str
+
+class Xgroq(BaseModel):
+    id:str
+
+class APIResponseModel(BaseModel):
+    id: str 
+    object: str
+    created: int
+    model: str
+    choices: List[ChoiceModel]
+    usage: Dict[str, Any]
+    system_fingerprint: str
+    x_groq: Xgroq
+    
+    
 
 class ResponseModel(BaseModel):
     id: str

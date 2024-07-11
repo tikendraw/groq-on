@@ -1,3 +1,4 @@
-from .agroq import agroq
+from .agroq_client import AgroqClient
+from .agroq_server import AgroqServer
 
-__all__ = ['agroq']
+__all__ = ['AgroqClient','AgroqServer']

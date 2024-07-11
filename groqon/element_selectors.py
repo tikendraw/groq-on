@@ -18,3 +18,5 @@ MODEL_NAME_SELECTOR = r"body > header > div.flex-1.flex.items-center.justify-cen
 
 SIGNIN_BUTTON_SELECTOR = r"#radix-\:r6\:"
 SIGNIN_BUTTON_TEXT = "Sign in to Groq"
+SIGNIN_TO_GROQ_BUTTON = "/html/body/footer/div[1]/div[1]/button[2]"
+WHISPER_MIC_BUTTON_SELECTOR  = r'body > main > div > div.hidden.md\:block.w-full > div > div.order-2.md\:order-1 > form > div > div > button'

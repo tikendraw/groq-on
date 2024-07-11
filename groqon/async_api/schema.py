@@ -37,14 +37,13 @@ class AgroqServerConfig(BaseModel):
 
 class AgroqClientConfig(BaseModel):
     models: List[str] = [DEFAULT_MODEL]
-    save_dir: Union[str, Path] = None
+    save_dir: Union[str, Path, None] = None
     system_prompt: str = SYSTEM_PROMPT
     print_output: bool = True
     temperature: float = TEMPERATURE
     max_tokens: int = MAX_TOKENS
     top_p:int = TOP_P
     stream: bool = STREAM
-    server_model_configs: str = MODEL_LIST_FILE
     stop_server:bool = False
     
     def __init__(self, **data):

@@ -21,7 +21,7 @@ LOGGING_CONFIG = {
             "formatter": "detailed",
         },
         "console": {
-            "level": "ERROR",
+            "level": "INFO",
             "class": "logging.StreamHandler",
             "formatter": "standard",
         },

@@ -1,0 +1,4 @@
+{"error":{
+    "message":"Rate limit reached for model `llama3-8b-8192` in organization `org_01hw33e1e3f6m8atash49mn7tm` on requests per minute (RPM): Limit 30, Used 30, Requested 1. Please try again in 1.906s. Visit https://console.groq.com/docs/rate-limits for more information.",
+    "type":"requests",
+    "code":"rate_limit_exceeded"}}

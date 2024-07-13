@@ -31,9 +31,7 @@ class AgroqServerConfig(BaseModel):
     headless: bool = True
     n_workers: int = 2
     reset_login: bool = False
-    server_model_configs: str = MODEL_LIST_FILE
     verbose:bool = True
-    print_output:bool=True
 
 class AgroqClientConfig(BaseModel):
     models: List[str] = [DEFAULT_MODEL]

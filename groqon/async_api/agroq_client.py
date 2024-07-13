@@ -2,11 +2,14 @@ import asyncio
 import json
 import uuid
 from datetime import datetime
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
+
 from pydantic import BaseModel
-from ..groq_config import PORT, modelindex
+
+from ..groq_config import ENDTOKEN, PORT, modelindex
 from ..logger import get_logger
 from ..utils import cc, log_function_call
+from ..utils import get_current_time_str as now
 from .agroq_utils import (
     async_generator_from_iterables,
     get_model_from_name,
@@ -23,9 +26,9 @@ logger = get_logger(__name__)
 class AgroqClient(BaseModel):
     """Checkout this url to get help with model selection based on tasks: https://artificialanalysis.ai/providers/groq """
     config: AgroqClientConfig
-    _PORT: int = PORT
+    _PORT: Optional[int] = PORT
 
-    # @log_function_call
+    @log_function_call
     async def multi_query_async(
         self,
         query: Union[str, List[str]],
@@ -35,11 +38,12 @@ class AgroqClient(BaseModel):
         max_tokens: Union[int, List[int]] = None,
         top_p: Union[int, List[int]] = None,
         stream: bool = True,
+        stop_server:bool = False
     ) -> list[Dict[str, Any]]:
 
         # Convert single string inputs to lists
         query = [query] if isinstance(query, str) else query
-        model = [model] if isinstance(model, str) else (model or modelindex)
+        model = [model] if isinstance(model, str) else (model or self.config.models or modelindex)
         system_prompt = [system_prompt] if isinstance(system_prompt, str) else (system_prompt or [self.config.system_prompt])
         temperature = [temperature] if isinstance(temperature, (int, float)) else (temperature or [self.config.temperature])
         max_tokens = [max_tokens] if isinstance(max_tokens, int) else (max_tokens or [self.config.max_tokens])
@@ -57,41 +61,67 @@ class AgroqClient(BaseModel):
         print(f'got {len(query)} queries')
 
 
-        responses = []
-
-
-        async for q, m, sp, t, mt in async_generator_from_iterables(query, model, system_prompt, temperature, max_tokens):
-            try:
-                output = await self.send_requestmodel(
-                    self.make_request_model(
-                        query=q,
-                        model=m,
-                        system_prompt=sp,
-                        temperature=t,
-                        max_tokens=mt,
-                        stream=stream
-                    )
-                )
-                if self.config.print_output:
-                    cc(f"Query: {q}", 'green')
-                    print_model_response(output)
-                    
-                if self.config.save_dir:
-                    await write_dict_to_json(output, self.config.save_dir , f'{datetime.now().isoformat()} {q}.json')
-                    
-                responses.append(output)
-            except Exception as e:
-                logger.error(f"Error processing query '{q}': {e}")
-                
-
+        responses = await self.make_request(
+            query=query,
+            model=model,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            stream=stream,
+            save_dir=self.config.save_dir,
+            print_output=self.config.print_output
+        )
+            
+        if stop_server:
+            _ = self.make_request(
+                query=[ENDTOKEN],
+                model=model,
+                system_prompt=system_prompt,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=stream
+            )
+            
         return responses
 
-    # @log_function_call
+
+    async def make_request(self, query, model, system_prompt, temperature, max_tokens, stream=True, save_dir=None, print_output=False):
+        async def process_single_request(q, m, sp, t, mt):
+            try:
+                request_model = self.make_request_model(
+                    query=q,
+                    model=m,
+                    system_prompt=sp,
+                    temperature=t,
+                    max_tokens=mt,
+                    stream=stream
+                )
+                output = await self.send_requestmodel(request_model)
+                
+                if print_output:
+                    cc(f"Query: {q}", 'green')
+                    print_model_response(output)
+                
+                if save_dir:
+                    await write_dict_to_json(output, save_dir, f'{datetime.now().isoformat()} {q}.json')
+                
+                return output
+            except Exception as e:
+                logger.error(f"Error processing query '{q}': {e}")
+                return {"error": str(e), "query": q}
+
+        request_params = zip(query, model, system_prompt, temperature, max_tokens)
+        tasks = [process_single_request(q, m, sp, t, mt) for q, m, sp, t, mt in request_params]
+        
+        responses = await asyncio.gather(*tasks)
+        return [r for r in responses if r is not None]
+    
+    @log_function_call
     async def send_requestmodel(self, request: RequestModel):
         request_byte = request.model_dump_json()
         return await self.tcp_client(request_byte)
 
-    # @log_function_call
+    @log_function_call
     async def tcp_client(self, message: str) -> dict:
         try:
             reader, writer = await asyncio.open_connection('127.0.0.1', self._PORT)
@@ -108,7 +138,7 @@ class AgroqClient(BaseModel):
         except Exception as e:
             logger.error(f"Error in TCP client: {e}")
 
-    # @log_function_call
+    @log_function_call
     def make_request_model(self, query: str, **kwargs) -> RequestModel:
         return RequestModel(
             id=kwargs.get('id', str(uuid.uuid4())),

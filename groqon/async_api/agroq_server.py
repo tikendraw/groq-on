@@ -1,5 +1,6 @@
 import asyncio
 import json
+import os
 import time
 from asyncio import Queue, QueueEmpty
 from typing import Any, Dict, List
@@ -15,7 +16,6 @@ from playwright.async_api import (
     async_playwright,
 )
 from pydantic import ValidationError
-from termcolor import colored
 
 from ..element_selectors import (
     CHAT_INPUT_SELECTOR,
@@ -61,6 +61,10 @@ class AgroqServer:
     def __init__(self, config: AgroqServerConfig):
         self.url=URL
         self.config = config
+        
+        if self.config.reset_login:
+            os.remove(self.config.cookie_file)
+        
         self.model_index = modelindex
         self.running = True
         self._PORT = PORT
@@ -70,7 +74,6 @@ class AgroqServer:
         self.response_queues = {i: Queue() for i in self.worker_ids}
         self.request_queue = Queue()
         self.output_queue = Queue()
-        self.stop_event = asyncio.Event()
         
     def set_worker_attrs(self, n_workers):
         self.worker_ids = [f'worker_{i}' for i in range(self.config.n_workers)]
@@ -78,7 +81,7 @@ class AgroqServer:
         self.worker_score = {worker_id: 0 for worker_id in self.worker_ids}
         
 
-    # @log_function_call
+    @log_function_call
     @profile
     async def astart(self) -> None:
         logger.debug('Agroq server starting...')
@@ -116,11 +119,11 @@ class AgroqServer:
             return None
                 
 
-    # @log_function_call
+    @log_function_call
     @profile
     async def handle_server_request(self, reader, writer):
         data = await reader.read(99999) # TODO: find something that gets all the incoming data
-
+        print('request in queue: ',self.request_queue.qsize())
 
         logger.info(f'>>>>>>>> request: server side : {data.decode()}')
 
@@ -129,7 +132,6 @@ class AgroqServer:
             
             # cc('Found endtoken. Exiting...', 'white', 'on_red')
             self.running = False
-            # self.stop_event.set()
             
             await self.astop()
             writer.close()
@@ -154,7 +156,7 @@ class AgroqServer:
         writer.close()
         await writer.wait_closed()
 
-    # @log_function_call
+    @log_function_call
     @profile
     async def astop(self):
         self.running = False
@@ -186,13 +188,14 @@ class AgroqServer:
         
 
 
-    # @log_function_call
+    @log_function_call
     @profile        
     async def worker_task(self, context: BrowserContext, worker_id: str, queue: Queue) -> None:
         page = await context.new_page()
         await self.setup_page(page)
 
         while self.running:
+            
             try:
                 try:
                     request_model = await self.request_queue.get()
@@ -232,7 +235,7 @@ class AgroqServer:
         return None
     
         
-    # @log_function_call
+    @log_function_call
     @profile
     async def do_query(self, page: Page, request_model: RequestModel, queue: Queue) -> None:
         try:
@@ -257,13 +260,13 @@ class AgroqServer:
         except Exception as e:
             logger.exception("Exception occurred: func - do_query ", exc_info=e)
             await queue.put(
-                ResponseModel(
-                    id=request_model.id,
-                    query=request_model.query,
-                    response_text="chat is disabled, no query submitted",
-                    model=request_model.model
+                self.create_error_api_response(
+                    error_message=f"Chat is temporarily disabled, Query: ({request_model.query}) not submitted.",
+                    error_code="timeout_error",
+                    error_type="timeout_error",
+                    status_code=500,
                 )
-            )
+                            )
             
     async def is_signedin(self, page):
         signin_button = await page.wait_for_selector(SIGNIN_TO_GROQ_BUTTON)
@@ -274,16 +277,16 @@ class AgroqServer:
             return True
         
         
-    # @log_function_call
+    @log_function_call
     @profile
     async def setup_page(self, page: Page):
         # await page.route("**/**/*.woff2", lambda x:x.abort())
         # await page.route("**/**/*.woff", lambda x:x.abort())
         # await page.route("**/**/*.css", lambda x:x.abort())
         # await page.route("**/**/web/metrics", lambda x:x.abort())
-        await page.goto(self.url, timeout=60 * 1000)
+        await page.goto(self.url, timeout=60 * 1000, wait_until='commit') # ["commit", "domcontentloaded", "load", "networkidle"]
 
-    # @log_function_call
+    @log_function_call
     @profile        
     async def handle_chat_completions(self, route: Route, request:Request, request_model: RequestModel, queue: Queue) -> None:
         request = route.request
@@ -333,8 +336,16 @@ class AgroqServer:
             # Check if it's a non-streamed response
             try:
                 non_streamed_data = json.loads(body_str)
-                if "choices" in non_streamed_data:
+
+                if 'error' in non_streamed_data.keys():
+                    logger.error(f"Error response received: for query {query} -{non_streamed_data}")
+                    output = self.process_error_response(error_dict=non_streamed_data, status_code=status_code)
+                    write_dict_to_json(output.model_dump(), groq_config_folder, f"Error {query}.json")
+                    return output
+                
+                elif "choices" in non_streamed_data:
                     return self.process_non_streamed_response(non_streamed_data)
+                
             except json.JSONDecodeError:
                 pass  # Not a valid JSON, proceed with streamed response handling
 
@@ -363,8 +374,12 @@ class AgroqServer:
                             usage = chunk["x_groq"].get("usage", usage)
                     except json.JSONDecodeError:
                         logger.exception("Failed to decode JSON")
-                elif line.startswith('{"error"'):
-                    return self.process_error_response(line, status_code=status_code)
+                        
+                # elif line.startswith('{"error"'):
+                #     output = self.process_error_response(error_line=line, status_code=status_code)
+                #     write_dict_to_json(output.model_dump(), groq_config_folder, f"Error {query}.json")
+                #     return output
+
 
             return APIResponseModel(
                 id=f"chatcmpl-{created}",
@@ -391,18 +406,22 @@ class AgroqServer:
         """Process a non-streamed response."""
         return APIResponseModel(**data)
 
-    def process_error_response(self, error_line: str, status_code: int = 500) -> APIResponseModel:
+    def process_error_response(self, error_line: str=None, error_dict:dict=None, status_code: int = 500) -> APIResponseModel:
         """Process an error response using the ErrorResponse Pydantic model."""
         try:
-            error_data = json.loads(error_line)
-            error_response = ErrorResponse(**error_data)
-            return self.create_error_api_response(error_response=error_response, status_code=status_code)
+            if error_line and error_dict is None:
+                error_dict = json.loads(error_line)
+                
+            error_response = ErrorResponse(**error_dict)
+            error = error_response.error
+            return self.create_error_api_response(error_message=error.message,error_code=error.code, error_type=error.type, status_code=status_code)
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error(f"Failed to parse error response: {error_line}", exc_info=e)
             return self.create_error_api_response(error_message=f"An unknown error occurred: {error_line}")
 
-    def create_error_api_response(self,error_message:str, error_code:str = 'Unknown error', error_response: ErrorResponse=None, status_code: int = 500) -> APIResponseModel:
+    def create_error_api_response(self,error_message:str=None, error_code:str = 'Unknown error', error_type:str="unknown_type", status_code: int = 500) -> APIResponseModel:
         """Create an APIResponseModel instance for error responses."""
+            
         created = int(time.time())
         return APIResponseModel(
             id=f"error-{created}",
@@ -412,13 +431,13 @@ class AgroqServer:
             choices=[
                 ChoiceModel(
                     index=0,
-                    message=MessageModel(role="assistant", content=error_response.model_dump_json() or error_message),
-                    finish_reason=f"error (status_code={status_code}, error_code={error_response.error.code or error_code})"
+                    message=MessageModel(role="assistant", content=error_message),
+                    finish_reason=f"error (status_code={status_code}, error_code={error_code})"
                 )
             ],
-            usage={'status_code': status_code},
+            usage={'status_code': status_code, 'error_code': error_code, 'error_type': error_type},
             system_fingerprint="error",
-            x_groq=Xgroq(id=f"error-{error_response.error.code or error_code}")
+            x_groq=Xgroq(id=f"error-{error_code}")
         )
 
     @profile
@@ -440,7 +459,7 @@ class AgroqServer:
     def byte_to_model_kwargs(self, byte: bytes) -> Dict:
         return json.loads(byte.decode())    
      
-    # @log_function_call
+    @log_function_call
     @profile
     async def get_cookie_or_login(self, url: str, cookie_file: str) -> List[Dict]:
         cookie = get_cookie(cookie_file) if file_exists(cookie_file) else None
@@ -460,7 +479,7 @@ class AgroqServer:
 
 
                 
-    # @log_function_call
+    @log_function_call
     @profile
     async def login_user(self) -> list:
         async with async_playwright() as p:

@@ -98,7 +98,7 @@ def save_config(config: dict, config_file):
 
     return
 
-def get_model_ids(models_file):
+def get_model_ids(models_file, exclude:list=None):
     """
     Reads the model IDs from the models.json file and populates the modelindex list.
 
@@ -116,5 +116,9 @@ def get_model_ids(models_file):
         )
     except Exception as e:
         print(e)
+    
+    if exclude:
+        modelindex = [model for model in modelindex if model not in exclude]
+    
     return modelindex
 

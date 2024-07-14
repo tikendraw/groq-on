@@ -17,7 +17,7 @@ from .agroq_utils import (
     write_dict_to_json,
     x_eq_len_of_y,
 )
-from .schema import AgroqClientConfig, RequestModel
+from .schema import AgroqClientConfig, APIRequestModel
 
 # from line_profiler import profile
 logger = get_logger(__name__)
@@ -31,7 +31,7 @@ class AgroqClient(BaseModel):
     @log_function_call
     async def multi_query_async(
         self,
-        query: Union[str, List[str]],
+        query: Union[str, List[str]]=None,
         model: Union[str, List[str]] = None, 
         system_prompt: Union[str, List[str]] = None, 
         temperature: Union[float, List[float]] = None,
@@ -41,6 +41,9 @@ class AgroqClient(BaseModel):
         stop_server:bool = False
     ) -> list[Dict[str, Any]]:
 
+        if query is None and stop_server:
+            query = [ENDTOKEN]
+                        
         # Convert single string inputs to lists
         query = [query] if isinstance(query, str) else query
         model = [model] if isinstance(model, str) else (model or self.config.models or modelindex)
@@ -48,7 +51,6 @@ class AgroqClient(BaseModel):
         temperature = [temperature] if isinstance(temperature, (int, float)) else (temperature or [self.config.temperature])
         max_tokens = [max_tokens] if isinstance(max_tokens, int) else (max_tokens or [self.config.max_tokens])
         top_p = [top_p] if isinstance(top_p, int) else (top_p or [self.config.top_p])
-        
         
 
         model = [get_model_from_name(name) for name in model]
@@ -71,9 +73,9 @@ class AgroqClient(BaseModel):
             save_dir=self.config.save_dir,
             print_output=self.config.print_output
         )
-            
+        
         if stop_server:
-            _ = self.make_request(
+            _ = await self.make_request(
                 query=[ENDTOKEN],
                 model=model,
                 system_prompt=system_prompt,
@@ -81,6 +83,7 @@ class AgroqClient(BaseModel):
                 max_tokens=max_tokens,
                 stream=stream
             )
+            return 
             
         return responses
 
@@ -99,7 +102,6 @@ class AgroqClient(BaseModel):
                 output = await self.send_requestmodel(request_model)
                 
                 if print_output:
-                    cc(f"Query: {q}", 'green')
                     print_model_response(output)
                 
                 if save_dir:
@@ -117,7 +119,7 @@ class AgroqClient(BaseModel):
         return [r for r in responses if r is not None]
     
     @log_function_call
-    async def send_requestmodel(self, request: RequestModel):
+    async def send_requestmodel(self, request: APIRequestModel):
         request_byte = request.model_dump_json()
         return await self.tcp_client(request_byte)
 
@@ -137,11 +139,12 @@ class AgroqClient(BaseModel):
         
         except Exception as e:
             logger.error(f"Error in TCP client: {e}")
+            raise e
 
     @log_function_call
-    def make_request_model(self, query: str, **kwargs) -> RequestModel:
-        return RequestModel(
-            id=kwargs.get('id', str(uuid.uuid4())),
+    def make_request_model(self, query: str, **kwargs) -> APIRequestModel:
+        return APIRequestModel(
+            local_id=kwargs.get('id', str(uuid.uuid4())),
             query=query,
             model=kwargs.get('model', self.config.models[0]),
             system_prompt=kwargs.get('system_prompt', self.config.system_prompt),

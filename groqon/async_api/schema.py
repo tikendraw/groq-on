@@ -1,5 +1,5 @@
 
-import uuid
+import json
 from pathlib import Path
 from typing import Any, Dict, List, Union
 
@@ -9,7 +9,6 @@ from ..groq_config import (
     DEFAULT_MODEL,
     GROQ_COOKIE_FILE,
     MAX_TOKENS,
-    MODEL_LIST_FILE,
     STREAM,
     SYSTEM_PROMPT,
     TEMPERATURE,
@@ -22,8 +21,10 @@ class ErrorModel(BaseModel):
     type: str
     code: str
 
+
 class ErrorResponse(BaseModel):
     error: ErrorModel
+        
         
 class AgroqServerConfig(BaseModel):
     cookie_file: str = GROQ_COOKIE_FILE
@@ -32,6 +33,7 @@ class AgroqServerConfig(BaseModel):
     n_workers: int = 2
     reset_login: bool = False
     verbose:bool = True
+
 
 class AgroqClientConfig(BaseModel):
     models: List[str] = [DEFAULT_MODEL]
@@ -50,21 +52,44 @@ class AgroqClientConfig(BaseModel):
             self.save_dir = Path(self.save_dir)
             self.save_dir.mkdir(parents=True, exist_ok=True)
 
+
 class MessageModel(BaseModel):
     content: str
     role: str
 
-class RequestModel(BaseModel):
-    id: str = None
-    query: str
-    model: str = DEFAULT_MODEL
-    system_prompt: str = SYSTEM_PROMPT
+
+class APIRequestModel(BaseModel):
+    local_id:str|None =None
+    query:str|None = None
+    model:str = DEFAULT_MODEL
+    system_prompt:str = SYSTEM_PROMPT
+    messages: List[MessageModel] | None = None
     temperature: float = TEMPERATURE
     max_tokens: int = MAX_TOKENS
     top_p: int = TOP_P
     stream: bool = STREAM
-    messages: List[MessageModel] = []
     
+    class Config:
+        arbitrary_types_allowed = False
+    
+    def __init__(self, **data):
+        super().__init__(**data)
+        if self.messages is None:
+            self.messages = []
+            self.add_initial_message()
+    
+    def get_query(self):
+        if self.query is None:
+            user_messages = [message for message in self.messages if message.role == "user"]
+            if user_messages:
+                self.query = user_messages[-1].content
+                return self.query
+        return self.query
+    
+    def add_initial_message(self):        
+        self.add_message(content=self.system_prompt, role="system")
+        self.add_message(content=self.query, role="user")
+
     def make_message(self, role: str, content: str):
         return MessageModel(role=role, content=content)
     
@@ -73,35 +98,32 @@ class RequestModel(BaseModel):
     
     def add_messages(self, messages: List[MessageModel]):
         self.messages.extend(messages)
-        
-    def add_history(self, response: 'ResponseModel'):
-        if response.query and response.response_text:
-            last_message = self.messages[-1]
-            if not (last_message.role == "user" and last_message.content==response.query):
-                self.add_message(role="user", content=response.query)
-            self.add_message(role="assistant", content=response.response_text)
-
-class APIRequestModel(BaseModel):
-    model:str
-    messages: List[MessageModel]
-    temperature: float
-    max_tokens: int
-    top_p: int
-    stream: bool
     
-    class Config:
-        arbitrary_types_allowed = False
+    # this doesn't work
+    # def add_history(self, response: 'APIResponseModel'):
+    #     if response.query and response.response_text:
+    #         last_message = self.messages[-1] if self.messages else None
+    #         if not (last_message and last_message.role == "user" and last_message.content == response.query):
+    #             self.add_message(role="user", content=response.query)
+    #         self.add_message(role="assistant", content=response.response_text)
+            
+    def model_dump(self):
+        return {
+            "model":self.model,
+            "messages":[
+                {
+                    "role":message.role,
+                    "content":message.content
+                } for message in self.messages
+            ],
+            "temperature":self.temperature,
+            "max_tokens":self.max_tokens,
+            "top_p":self.top_p,
+            "stream":self.stream
+        }
     
-    @classmethod
-    def from_request_model(self, request_model: RequestModel):
-        return APIRequestModel(
-            model=request_model.model,
-            messages=request_model.messages,
-            temperature=request_model.temperature,
-            max_tokens=request_model.max_tokens,
-            top_p=request_model.top_p,
-            stream=request_model.stream
-        )
+    def model_dump_json(self):
+        return json.dumps(self.model_dump())
 
 
 class ChoiceModel(BaseModel):
@@ -114,6 +136,8 @@ class Xgroq(BaseModel):
     id:str
 
 class APIResponseModel(BaseModel):
+    local_id:str|None =None
+    query:str|None = None
     id: str 
     object: str
     created: int
@@ -122,18 +146,10 @@ class APIResponseModel(BaseModel):
     usage: Dict[str, Any]
     system_fingerprint: str
     x_groq: Xgroq
-    
-    
 
-class ResponseModel(BaseModel):
-    id: str
-    query: str | None = None
-    response_text: str | None = None
-    raw_response: str | Dict = None
-    model: str | None = None
-    tokens_per_second: float | int | None = 0
-    stats: Dict[str, Any] | str | None = {}
-    status_code: int | None = None
     
-    def __repr__(self):
-        return f"ResponseModel(id={self.id}) \nquery={self.query} \nresponse_text={self.response_text} \nmodel={self.model} \ntokens_per_second={self.tokens_per_second}"
+def set_local_id_and_query(api_request:APIRequestModel, api_response:APIResponseModel):
+    api_response.local_id  = api_request.local_id 
+    api_response.query  = api_request.get_query()
+    return api_response
+

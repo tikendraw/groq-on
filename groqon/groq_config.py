@@ -19,14 +19,14 @@ URL = "https://groq.com/"
 API_URL = "https://api.groq.com/openai/v1/chat/completions"
 MODEL_URL = "https://api.groq.com/openai/v1/models"
 AUTHENTICATION_URL = 'https://web.stytch.com/sdk/v1/oauth/authenticate'
-ENDTOKEN='<|endtoken-9911111414|>'
+ENDTOKEN='<|stopgroqontoken|>'
 PORT = 8888
 
 
 # there is a whisper model in the models list in groq website (filter that)
 EXCLUDED_MODELS = ['whisper-large-v3']
-modelindex = get_model_ids(models_file=MODEL_LIST_FILE, exclude=EXCLUDED_MODELS)
-DEFAULT_MODEL = modelindex[2]  # Llama3-8b
+modelindex = get_model_ids(models_file=MODEL_LIST_FILE, exclude=EXCLUDED_MODELS) if MODEL_LIST_FILE.exists() else ["gemma2-9b-it","gemma-7b-it","llama3-70b-8192","llama3-8b-8192","mixtral-8x7b-32768"]
+DEFAULT_MODEL = modelindex[3]  # Llama3-8b
 
 if not GROQON_CONFIG_FILE.exists():
     config = {

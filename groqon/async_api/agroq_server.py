@@ -4,6 +4,7 @@ import os
 import time
 from asyncio import Queue, QueueEmpty
 from typing import Any, Dict, List
+from urllib.parse import parse_qs
 
 from icecream import ic
 from line_profiler import profile
@@ -46,9 +47,8 @@ from .schema import (
     ChoiceModel,
     ErrorResponse,
     MessageModel,
-    RequestModel,
-    ResponseModel,
     Xgroq,
+    set_local_id_and_query,
 )
 
 logger = get_logger(__name__)
@@ -123,39 +123,94 @@ class AgroqServer:
     @profile
     async def handle_server_request(self, reader, writer):
         data = await reader.read(99999) # TODO: find something that gets all the incoming data
-        print('request in queue: ',self.request_queue.qsize())
+        is_http=False
+        
+        print('requests in queue: ',self.request_queue.qsize())
 
-        logger.info(f'>>>>>>>> request: server side : {data.decode()}')
-
+        # Check if it's a regular asyncio request or a HTTP request
+        if data.startswith(b'POST') or data.startswith(b'GET'):
+            # Handle HTTP request (from requests module or wget)
+            data = self.parse_http_request(data.decode())
+            data = self.dict_to_byte(data)
+            is_http =True
+            
         # # Closing if endtoken is received
         if ENDTOKEN in data.decode() and self.request_queue.empty():
             
-            # cc('Found endtoken. Exiting...', 'white', 'on_red')
+            cc('Found endtoken. Exiting...', 'white', 'on_red')
             self.running = False
             
-            await self.astop()
             writer.close()
             await writer.wait_closed()
+            await self.astop()
+            
             return
         
         mm_dict = self.byte_to_model_kwargs(data)
-        mm = RequestModel(**mm_dict)
+        mm = APIRequestModel(**mm_dict)
 
         self.request_queue.put_nowait(mm)
         self.n_request +=1
 
         # do not put anything above the code: it passes without any output
         response =  await self.output_queue.get()
-                
+        
         if response:
             logger.info(f'<<<<<<< response: server side : {response.model_dump()}')
-            response_byte = self.model_to_byte(response)            
-            writer.write(response_byte)
-            await writer.drain()
+            await self.send_response(writer, response, is_http)
 
-        writer.close()
         await writer.wait_closed()
+        
+    async def send_response(self, writer, response, is_http: bool):
+        if is_http:
+            response_json = response.model_dump_json()
+            http_response = (
+                b"HTTP/1.1 200 OK\r\n"
+                b"Content-Type: application/json\r\n"
+                b"Content-Length: " + str(len(response_json)).encode() + b"\r\n"
+                b"Content-Disposition: inline\r\n"  # This tells the client to display the content inline
+                b"X-Content-Type-Options: nosniff\r\n"  # This prevents MIME type sniffing
+                b"\r\n" + response_json.encode()
+            )
+            writer.write(http_response)
+        else:
+            # For regular asyncio requests, send the response as before
+            response_byte = self.model_to_byte(response)
+            writer.write(response_byte)
+        
+        await writer.drain()
+        writer.close()
+        
 
+    def parse_http_request(self, request_str: str) -> Dict:
+        # Split the request into headers and body
+        headers, _, body = request_str.partition('\r\n\r\n')
+        
+        # Parse the request line
+        request_line = headers.split('\r\n')[0]
+        method, path, _ = request_line.split(' ')
+
+        # Parse query parameters if it's a GET request
+        if method == 'GET':
+            query_params = parse_qs(path.split('?')[1]) if '?' in path else {}
+            return {k: v[0] for k, v in query_params.items()}
+        
+        # For POST requests, parse the body
+        elif method == 'POST':
+            content_type = next((line.split(': ')[1] for line in headers.split('\r\n') if line.startswith('Content-Type:')), None)
+            
+            if content_type == 'application/json':
+                return json.loads(body)
+            elif content_type == 'application/x-www-form-urlencoded':
+                return {k: v[0] for k, v in parse_qs(body).items()}
+            else:
+                # Handle other content types as needed
+                return {}
+        
+        # Handle other HTTP methods as needed
+        else:
+            return {}
+        
     @log_function_call
     @profile
     async def astop(self):
@@ -209,7 +264,7 @@ class AgroqServer:
                         await self.handle_chat_completions(route, request, request_model, queue)
 
                     await page.route("**/**/chat/completions", wrapper_handle_chat_completions)
-                    await self.do_query(page, request_model, queue=queue)
+                    await self.do_query(page, query=request_model.get_query(), queue=queue)
                     self.request_queue.task_done()
                     self.n_request -= 1
                     # cc(f'n request: {self.n_request}', 'yellow', 'on_black')
@@ -237,7 +292,7 @@ class AgroqServer:
         
     @log_function_call
     @profile
-    async def do_query(self, page: Page, request_model: RequestModel, queue: Queue) -> None:
+    async def do_query(self, page: Page, query:str, queue: Queue) -> None:
         try:
             textarea = await page.wait_for_selector(CHAT_INPUT_SELECTOR)
             n_try = 10
@@ -250,18 +305,18 @@ class AgroqServer:
                     # cc('chat is temp disabled', 'yellow')
                     n_try -= 1
                 else:
-                    raise TimeoutError(f"Chat is temporarily disabled, Query: ({request_model.query}) not submitted.")
+                    raise TimeoutError(f"Chat is temporarily disabled, Query: ({query}) not submitted.")
                     break
                 
             if not textarea_is_disabled:
-                await textarea.fill(request_model.query)
+                await textarea.fill(query)
                 await page.locator(QUERY_SUBMIT_SELECTOR).click()
 
         except Exception as e:
             logger.exception("Exception occurred: func - do_query ", exc_info=e)
             await queue.put(
                 self.create_error_api_response(
-                    error_message=f"Chat is temporarily disabled, Query: ({request_model.query}) not submitted.",
+                    error_message=f"Chat is temporarily disabled, Query: ({query}) not submitted.",
                     error_code="timeout_error",
                     error_type="timeout_error",
                     status_code=500,
@@ -284,30 +339,20 @@ class AgroqServer:
         # await page.route("**/**/*.woff", lambda x:x.abort())
         # await page.route("**/**/*.css", lambda x:x.abort())
         # await page.route("**/**/web/metrics", lambda x:x.abort())
+        await page.route("https://api.groq.com/openai/v1/models", self.get_models_from_api_response)
         await page.goto(self.url, timeout=60 * 1000, wait_until='commit') # ["commit", "domcontentloaded", "load", "networkidle"]
 
     @log_function_call
     @profile        
-    async def handle_chat_completions(self, route: Route, request:Request, request_model: RequestModel, queue: Queue) -> None:
+    async def handle_chat_completions(self, route: Route, request:Request, api_request_model: APIRequestModel, queue: Queue) -> None:
         request = route.request
 
         if request.method == "POST":
             # cc('method is post', 'blue')
             data = request.post_data_json
             
-            if data:
-                request_model.add_message(
-                    content=request_model.system_prompt,
-                    role="system",
-                )
-                
-                request_model.add_message(
-                    content=request_model.query,
-                    role="user",
-                )
-                
-                api_payload = APIRequestModel.from_request_model(request_model)
-                api_payload_dict = api_payload.model_dump_json()
+            if data:                
+                api_payload_dict = api_request_model.model_dump_json()
 
                 # cc(api_payload_dict, 'green')
                 await route.continue_(
@@ -321,8 +366,8 @@ class AgroqServer:
             route.continue_()
             
         response = await route.fetch()
-        response = await self.handle_streamed_response(response, request_model.query)
-
+        response = await self.handle_streamed_response(response, api_request_model.query)
+        response = set_local_id_and_query(api_request=api_request_model, api_response=response)
         await queue.put(response)
 
 
@@ -354,7 +399,7 @@ class AgroqServer:
             created = int(time.time())
             model = ""
             usage = {}
-            system_fingerprint = ""
+            system_fingerprint = "none"
             x_groq_id = ""
 
             lines = body_str.split("\n\n")
@@ -457,7 +502,10 @@ class AgroqServer:
     
     @profile
     def byte_to_model_kwargs(self, byte: bytes) -> Dict:
-        return json.loads(byte.decode())    
+        return json.loads(byte.decode()) 
+    
+    def dict_to_byte(self, x:dict) -> bytes:
+        return (json.dumps(x)).encode()
      
     @log_function_call
     @profile

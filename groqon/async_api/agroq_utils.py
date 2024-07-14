@@ -8,12 +8,11 @@ from pathlib import Path
 from typing import Any, Dict
 
 import aiofiles
+from termcolor import colored
 from tqdm import tqdm
 
 from ..groq_config import DEFAULT_MODEL, modelindex
 from ..logger import get_logger
-
-from termcolor import colored
 from .schema import APIResponseModel
 
 logger = get_logger(__name__)
@@ -146,6 +145,7 @@ def print_model_response(response: dict):
         print(colored(f"{key} : {dictt.get(key, default)}", color))
 
     response = APIResponseModel(**response)
+    ccc(f"Query:    {response.query}", 'green')
     ccc(f"Response: {response.choices[0].message.content}", 'yellow')
     ccc(f"Model: {response.model}", 'magenta')
     ccc(f"TOK/s: {calculate_tokens_per_second(response.usage)}", 'magenta')

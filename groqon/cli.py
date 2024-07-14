@@ -26,12 +26,11 @@ def one(ctx: click.Context):
     ctx.obj['config'] = config
     ctx.obj['defaults'] = DEFAULTS
     ctx.obj['modelindex'] = modelindex
-    ctx.obj['server_running'] = False
 
 
 @click.command()
 @click.argument("query", type=str, nargs=-1)
-@click.option("--save_dir",     "-s", type=str, default=None,  help="file path to save the generated response file, not saved if not provided")
+@click.option("--save_dir",     "-s",   default=None,                              type=str,  help="file path to save the generated response file, not saved if not provided")
 @click.option("--models",       "-m",   default=','.join(DEFAULTS.get("models")),  type=str,  help=f"Comma separated(no spaces) list of models to be used, pick from {modelindex}(pick llms only).")
 @click.option("--system_prompt","-sp",  default=CLIENT_CONFIG.get("system_prompt"),type=str,  help="set False to see the browser window, (you may not want to see)")
 @click.option("--print_output", "-p",   default=True,                              type=bool, help="number of windows to serve as query workers. (more windows==more memory usage==faster query if multiple queries are running)")
@@ -59,7 +58,7 @@ def query(
     if isinstance(models, str):
         models = models.split(',')
     
-    config = AgroqClientConfig(
+    make_calls(
         models = models,
         save_dir = save_dir,
         system_prompt = system_prompt,
@@ -69,12 +68,15 @@ def query(
         top_p = top_p,
         stream = stream,
         stop_server = stop_server,
+        query=query
     )
+
+def make_calls(**kwargs):
+    query = kwargs.pop('query')
+    stop_server=kwargs.pop('stop_server') or False
+    config = AgroqClientConfig(**kwargs)
     client = AgroqClient(config=config)
-    asyncio.run(client.multi_query_async(query=query))
-
-
-
+    asyncio.run(client.multi_query_async(query=query, stop_server=stop_server))
 
 def run_server(**kwargs):
     config = AgroqServerConfig(**kwargs)
@@ -88,12 +90,12 @@ def run_server(**kwargs):
     
 @click.command()
 @click.pass_context
-@click.option("--cookie_file",          "-cf", default=DEFAULTS.get("cookie_file"), type=click.Path(exists=True),   help="Set cookie file, provide path to cookie file path, default is ~/.groqon/groq_cookie.json.")
-@click.option("--models",               "-m",  default=','.join(DEFAULTS.get("models")),       type=str,                help=f"Comma separated(no spaces) list of models to be used, pick from {modelindex}(pick llms only).")
-@click.option("--headless",             "-hl", default=DEFAULTS.get("headless"),     type=bool,                     help="set False to see the browser window, (you may not want to see)")
-@click.option("--n_workers",            "-w",  default=DEFAULTS.get("n_workers"),    type=int,                      help="number of windows to serve as query workers. (more windows==more memory usage==faster query if multiple queries are running)")
-@click.option("--reset_login",          "-rl", default=DEFAULTS.get("reset_login"),  type=bool,                     help="Reset the login information in cookie file, you have to login again when window opens")
-@click.option("--verbose",              "-v",  default=DEFAULTS.get("verbose"),        type=bool,                   help="Set True to see verbose output")
+@click.option("--cookie_file", "-cf", default=DEFAULTS.get("cookie_file"),      type=click.Path(exists=True),   help="Set cookie file, provide path to cookie file path, default is ~/.groqon/groq_cookie.json.")
+@click.option("--models",      "-m",  default=','.join(DEFAULTS.get("models")), type=str,                       help=f"Comma separated(no spaces) list of models to be used, pick from {modelindex}(pick llms only).")
+@click.option("--headless",    "-hl", default=DEFAULTS.get("headless"),         type=bool,                      help="set False to see the browser window, (you may not want to see)")
+@click.option("--n_workers",   "-w",  default=DEFAULTS.get("n_workers"),        type=int,                       help="number of windows to serve as query workers. (more windows==more memory usage==faster query if multiple queries are running)")
+@click.option("--reset_login", "-rl", default=DEFAULTS.get("reset_login"),      type=bool,                      help="Reset the login information in cookie file, you have to login again when window opens")
+@click.option("--verbose",     "-v",  default=DEFAULTS.get("verbose"),          type=bool,                      help="Set True to see verbose output")
 def serve(
     ctx: click.Context,
     cookie_file:Path,          
@@ -103,6 +105,7 @@ def serve(
     reset_login:bool,          
     verbose:bool,              
 ):
+    """starts server and listens for queries"""
     
     if isinstance(models, str):
         models = models.split(',')
@@ -115,41 +118,43 @@ def serve(
         reset_login = reset_login,
         verbose = verbose,
     )
+    
 
 
 @click.command()
 @click.pass_context
-def stop_server(ctx: click.Context):
-    if not ctx.obj['server_running']:
-        click.echo("Server is not running.")
-        return
-    
-    async def stop():
-        server = ctx.obj['server']
-        await server.astop()
-        ctx.obj['server_running'] = False
-        click.echo("Server stopped successfully.")
-    
-    asyncio.run(stop())
-    
-    
+def stop(ctx: click.Context):
+    """stops server"""
+    make_calls(
+        stop_server=True,
+        models          = ctx.obj['modelindex'], 
+        save_dir        =None,
+        system_prompt   ='you are a good boy',
+        print_output    =False,
+        temperature     =0.1,
+        max_tokens      =2024,
+        top_p           =1,
+        stream          =True,
+        query           =None,
+    )    
+     
 @click.command()
-@click.option("--cookie_file",          "-cf", default=DEFAULTS.get("cookie_file"), type=click.Path(exists=True),   help="Set cookie file, provide path to cookie file path, default is ~/.groqon/groq_cookie.json.")
-@click.option("--models",               "-m",  default=','.join(DEFAULTS.get("models")),       type=str,                help=f"Comma separated(no spaces) list of models to be used, pick from {modelindex}(pick llms only).")
-@click.option("--headless",             "-hl", default=DEFAULTS.get("headless"),     type=bool,                     help="set False to see the browser window, (you may not want to see)")
-@click.option("--n_workers",            "-w",  default=DEFAULTS.get("n_workers"),    type=int,                      help="number of windows to serve as query workers. (more windows==more memory usage==faster query if multiple queries are running)")
-@click.option("--reset_login",          "-rl", default=DEFAULTS.get("reset_login"),  type=bool,                     help="Reset the login information in cookie file, you have to login again when window opens")
-@click.option("--verbose",              "-v",  default=DEFAULTS.get("verbose"),        type=bool,                   help="Set True to see verbose output")
-@click.option("--print_output",         "-p",  default=DEFAULTS.get("print_output"),   type=bool,                   help="Prints output to the terminal")
-def config(cookie_file:Path          ,#= DEFAULTS.get("cookie_file"),
-           models:str|list[str]      ,#= DEFAULTS.get("models"),
-           headless:bool             ,#= DEFAULTS.get("headless"),
-           n_workers:int             ,#= DEFAULTS.get("n_workers"),
-           reset_login:bool          ,#= DEFAULTS.get("reset_login"),
-           server_model_configs:Path ,#= DEFAULTS.get("server_model_configs"),
-           verbose:bool              ,#= DEFAULTS.get("verbose"),
-           print_output:bool         ,#= DEFAULTS.get("print_output"),
-           ):
+@click.option("--cookie_file",  "-cf", default=DEFAULTS.get("cookie_file"),     type=click.Path(exists=True),   help="Set cookie file, provide path to cookie file path, default is ~/.groqon/groq_cookie.json.")
+@click.option("--models",       "-m",  default=','.join(DEFAULTS.get("models")),type=str,                       help=f"Comma separated(no spaces) list of models to be used, pick from {modelindex}(pick llms only).")
+@click.option("--headless",     "-hl", default=DEFAULTS.get("headless"),        type=bool,                      help="set False to see the browser window, (you may not want to see)")
+@click.option("--n_workers",    "-w",  default=DEFAULTS.get("n_workers"),       type=int,                       help="number of windows to serve as query workers. (more windows==more memory usage==faster query if multiple queries are running)")
+@click.option("--reset_login",  "-rl", default=DEFAULTS.get("reset_login"),     type=bool,                      help="Reset the login information in cookie file, you have to login again when window opens")
+@click.option("--verbose",      "-v",  default=DEFAULTS.get("verbose"),         type=bool,                      help="Set True to see verbose output")
+@click.option("--print_output", "-p",  default=DEFAULTS.get("print_output"),    type=bool,                      help="Prints output to the terminal")
+def config(
+    cookie_file:Path,
+    models:str|list[str],
+    headless:bool,
+    n_workers:int,
+    reset_login:bool,
+    verbose:bool,
+    print_output:bool,
+    ):
     """saves Configuration options."""
     
     if isinstance(models, str):
@@ -162,7 +167,6 @@ def config(cookie_file:Path          ,#= DEFAULTS.get("cookie_file"),
             "headless" : headless,
             "n_workers" : n_workers,
             "reset_login" : reset_login,
-            "server_model_configs" : server_model_configs,
             "verbose" : verbose,
             "print_output" : print_output,
         }
@@ -175,4 +179,5 @@ def config(cookie_file:Path          ,#= DEFAULTS.get("cookie_file"),
 one.add_command(config)
 one.add_command(serve)
 one.add_command(query)
+one.add_command(stop)
 

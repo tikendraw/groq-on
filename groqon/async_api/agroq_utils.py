@@ -13,7 +13,7 @@ from tqdm import tqdm
 
 from ..groq_config import DEFAULT_MODEL, modelindex
 from ..logger import get_logger
-from .schema import APIResponseModel
+from .schema import APIResponseModel, ErrorResponse
 
 logger = get_logger(__name__)
 
@@ -141,13 +141,17 @@ def ccc(x, *args, end=None, **kwargs):
 def print_model_response(response: dict):
     """Print the model response."""
     
-    def print_color(dictt, key, default, color):
-        print(colored(f"{key} : {dictt.get(key, default)}", color))
-
-    response = APIResponseModel(**response)
-    ccc(f"Query:    {response.query}", 'green')
-    ccc(f"Response: {response.choices[0].message.content}", 'yellow')
-    ccc(f"Model: {response.model}", 'magenta')
-    ccc(f"TOK/s: {calculate_tokens_per_second(response.usage)}", 'magenta')
+    if 'error' in response.keys():
+        response = ErrorResponse(**response)
+        ccc(f"Query:    {response.query}", 'green')
+        ccc(f"Error: {response.error.message}", 'red')
+        ccc(f"Model: {response.error.type}", "magenta")
+        ccc(f"Code: {response.error.code}", "magenta")
+    else:
+        response = APIResponseModel(**response)    
+        ccc(f"Query:    {response.query}", 'green')
+        ccc(f"Response: {response.choices[0].message.content}", 'yellow')
+        ccc(f"Model: {response.model}", 'magenta')
+        ccc(f"TOK/s: {calculate_tokens_per_second(response.usage)}", 'magenta')
     
     print()

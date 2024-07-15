@@ -45,6 +45,7 @@ from .schema import (
     APIRequestModel,
     APIResponseModel,
     ChoiceModel,
+    ErrorModel,
     ErrorResponse,
     MessageModel,
     Xgroq,
@@ -55,6 +56,8 @@ logger = get_logger(__name__)
 ic.disable()
 
 
+class EndTokenFoundError(Exception):
+    pass 
 
 
 class AgroqServer:
@@ -74,7 +77,8 @@ class AgroqServer:
         self.response_queues = {i: Queue() for i in self.worker_ids}
         self.request_queue = Queue()
         self.output_queue = Queue()
-        
+        self.shutdown_event = asyncio.Event()
+
     def set_worker_attrs(self, n_workers):
         self.worker_ids = [f'worker_{i}' for i in range(self.config.n_workers)]
         self.workers_dict = {worker_id: None for worker_id in self.worker_ids}
@@ -103,22 +107,27 @@ class AgroqServer:
 
                 addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
                 logger.info(f'Serving on {addrs}')
-
+                
                 async with self.server:
-                    try:
-                        await self.server.serve_forever()
-                    except KeyboardInterrupt as e:
-                        logger.exception('KeyboardInterrupt: Exiting...', exc_info=e)
-                    except asyncio.CancelledError as e:
-                        logger.exception('asyncio.CancelledError: Exiting...', exc_info=e)
-                    
+                    # Run server and wait for stop event
+                    await asyncio.gather(
+                        self.server.serve_forever(),
+                        self.wait_for_stop()
+                    )
+
         except Exception as e:
             logger.exception("Error in astart", exc_info=e)
         finally:
-            self.astop()
+            # await self.astop()
             return None
                 
-
+    async def wait_for_stop(self):
+        await self.shutdown_event.wait()
+        # self.server.close()
+        # await self.server.wait_closed()
+        await self.astop()
+        print("Server stopped.")
+        
     @log_function_call
     @profile
     async def handle_server_request(self, reader, writer):
@@ -126,10 +135,9 @@ class AgroqServer:
         is_http=False
         
         print('requests in queue: ',self.request_queue.qsize())
-
+        cc(f'>>>>>>> request: {data.decode()}', 'white', 'on_red')
         # Check if it's a regular asyncio request or a HTTP request
         if data.startswith(b'POST') or data.startswith(b'GET'):
-            # Handle HTTP request (from requests module or wget)
             data = self.parse_http_request(data.decode())
             data = self.dict_to_byte(data)
             is_http =True
@@ -138,12 +146,13 @@ class AgroqServer:
         if ENDTOKEN in data.decode() and self.request_queue.empty():
             
             cc('Found endtoken. Exiting...', 'white', 'on_red')
-            self.running = False
-            
+            writer.write(b"Server stopped")
+            await writer.drain()
             writer.close()
             await writer.wait_closed()
-            await self.astop()
-            
+            cc('Groqon Server stopped.', 'white', 'on_red')
+            self.shutdown_event.set()  # Signal the main loop to stop
+
             return
         
         mm_dict = self.byte_to_model_kwargs(data)
@@ -216,25 +225,30 @@ class AgroqServer:
     async def astop(self):
         self.running = False
 
+        # Create a copy of the workers_dict items
+        workers = list(self.workers_dict.items())
+
         # Cancel all worker tasks
-        for worker_id, worker in self.workers_dict.items():
+        for worker_id, worker in workers:
             if worker:
                 worker.cancel()
                 try:
                     await worker
                 except asyncio.CancelledError:
-                    logger.error(f"Worker {worker_id} cancelled.")
+                    logger.info(f"Worker {worker_id} cancelled successfully.")
                 except Exception as e:
                     logger.error(f"Error while cancelling worker {worker_id}: {e}")
 
-        # Cancel server task if it exists
-        if hasattr(self, 'server'):
-            self.server.close()
+
+        self.server.close()
+        await self.server.wait_closed()
+            
 
         # Cancel any remaining tasks and clear queues
         self.workers_dict.clear()
         self.reset()
-            
+        logger.info("Groqon Server stopped.")
+
     
     def reset(self):
         self.request_queue = Queue()
@@ -270,7 +284,7 @@ class AgroqServer:
                     # cc(f'n request: {self.n_request}', 'yellow', 'on_black')
                     self.worker_score[worker_id] = self.worker_score.get(worker_id, 0) + 1
 
-                    # cc(self.worker_score, 'blue', 'on_white')
+                    cc(self.worker_score, 'blue', 'on_white')
 
                     # cc('waiting after entering query response', 'red', 'on_white', ['bold', 'blink'])
                     response = await queue.get()
@@ -320,6 +334,7 @@ class AgroqServer:
                     error_code="timeout_error",
                     error_type="timeout_error",
                     status_code=500,
+                    query=query
                 )
                             )
             
@@ -384,7 +399,7 @@ class AgroqServer:
 
                 if 'error' in non_streamed_data.keys():
                     logger.error(f"Error response received: for query {query} -{non_streamed_data}")
-                    output = self.process_error_response(error_dict=non_streamed_data, status_code=status_code)
+                    output = self.process_error_response(error_dict=non_streamed_data, status_code=status_code, query=query)
                     write_dict_to_json(output.model_dump(), groq_config_folder, f"Error {query}.json")
                     return output
                 
@@ -393,13 +408,13 @@ class AgroqServer:
                 
             except json.JSONDecodeError:
                 pass  # Not a valid JSON, proceed with streamed response handling
-
+            
             # Handle streamed response
             accumulated_content = ""
             created = int(time.time())
             model = ""
             usage = {}
-            system_fingerprint = "none"
+            system_fingerprint = ""
             x_groq_id = ""
 
             lines = body_str.split("\n\n")
@@ -424,8 +439,6 @@ class AgroqServer:
                 #     output = self.process_error_response(error_line=line, status_code=status_code)
                 #     write_dict_to_json(output.model_dump(), groq_config_folder, f"Error {query}.json")
                 #     return output
-
-
             return APIResponseModel(
                 id=f"chatcmpl-{created}",
                 object="chat.completion",
@@ -451,7 +464,7 @@ class AgroqServer:
         """Process a non-streamed response."""
         return APIResponseModel(**data)
 
-    def process_error_response(self, error_line: str=None, error_dict:dict=None, status_code: int = 500) -> APIResponseModel:
+    def process_error_response(self, error_line: str=None, error_dict:dict=None, status_code: int = 500, query:str=None) -> APIResponseModel:
         """Process an error response using the ErrorResponse Pydantic model."""
         try:
             if error_line and error_dict is None:
@@ -459,31 +472,25 @@ class AgroqServer:
                 
             error_response = ErrorResponse(**error_dict)
             error = error_response.error
-            return self.create_error_api_response(error_message=error.message,error_code=error.code, error_type=error.type, status_code=status_code)
+            return self.create_error_api_response(error_message=error.message,error_code=error.code, error_type=error.type, status_code=status_code, query=query)
         except (json.JSONDecodeError, ValidationError) as e:
             logger.error(f"Failed to parse error response: {error_line}", exc_info=e)
             return self.create_error_api_response(error_message=f"An unknown error occurred: {error_line}")
 
-    def create_error_api_response(self,error_message:str=None, error_code:str = 'Unknown error', error_type:str="unknown_type", status_code: int = 500) -> APIResponseModel:
+    def create_error_api_response(self,error_message:str=None, error_code:str = 'Unknown error', error_type:str="unknown_type",query:str=None, status_code: int = 500) -> APIResponseModel:
         """Create an APIResponseModel instance for error responses."""
             
-        created = int(time.time())
-        return APIResponseModel(
-            id=f"error-{created}",
-            object="chat.completion",
-            created=created,
-            model="error",
-            choices=[
-                ChoiceModel(
-                    index=0,
-                    message=MessageModel(role="assistant", content=error_message),
-                    finish_reason=f"error (status_code={status_code}, error_code={error_code})"
-                )
-            ],
-            usage={'status_code': status_code, 'error_code': error_code, 'error_type': error_type},
-            system_fingerprint="error",
-            x_groq=Xgroq(id=f"error-{error_code}")
+        return ErrorResponse(
+            error=ErrorModel(
+                message=error_message,
+                code=error_code,
+                type=error_type
+            ),
+            status_code=status_code,
+            query=query
         )
+
+        
 
     @profile
     async def get_models_from_api_response(self, route: Route, *args, **kwargs):

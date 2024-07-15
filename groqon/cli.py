@@ -83,8 +83,10 @@ def run_server(**kwargs):
     server = AgroqServer(config)
     
     async def main():
-        await server.astart()
-                
+        try:
+            await server.astart()
+        except Exception as e:
+            print("Error in server execution: ", e)
     asyncio.run(main())
 
     

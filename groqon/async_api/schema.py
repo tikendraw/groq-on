@@ -24,7 +24,8 @@ class ErrorModel(BaseModel):
 
 class ErrorResponse(BaseModel):
     error: ErrorModel
-        
+    query:str|None = None
+    status_code:int|None = None
         
 class AgroqServerConfig(BaseModel):
     cookie_file: str = GROQ_COOKIE_FILE
@@ -144,12 +145,15 @@ class APIResponseModel(BaseModel):
     model: str
     choices: List[ChoiceModel]
     usage: Dict[str, Any]
-    system_fingerprint: str
+    system_fingerprint: str | None =None
     x_groq: Xgroq
 
     
-def set_local_id_and_query(api_request:APIRequestModel, api_response:APIResponseModel):
-    api_response.local_id  = api_request.local_id 
+def set_local_id_and_query(api_request:APIRequestModel, api_response:APIResponseModel | ErrorResponse):
+    
+    if isinstance(api_response, APIResponseModel):
+        api_response.local_id  = api_request.local_id 
+    
     api_response.query  = api_request.get_query()
     return api_response
 

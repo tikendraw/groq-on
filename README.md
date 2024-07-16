@@ -171,7 +171,7 @@ data = {
     "model": "gemma-7b-it",
     "messages": [
         {"role": "system", "content": "Please try to provide useful, helpful and actionable answers."},
-        {"role": "user", "content": "who is megan fox?"}
+        {"role": "user", "content": "why donald trump got shot?"}
     ],
     "temperature": 0.1,
     "max_tokens": 2048,
@@ -182,6 +182,7 @@ headers = {"Content-Type": "application/json"}
 
 response = requests.post(url, json=data, headers=headers)
 print(response.json())
+
 ```
 
 ## Key Features and Benefits

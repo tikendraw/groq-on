@@ -1,13 +1,13 @@
 [tool.poetry]
 name = "groqon"
-version = "0.1.93"
+version = "0.2.00"
 description = "Use Groq.com as llm"
 authors = ["tikendraw <tikendraksahu1029@gmail.com>"]
 readme = "README.md"
 
 [tool.poetry.dependencies]
 python = "^3.11"
-playwright = "^1.45.0"
+playwright = "1.44.0"
 fastapi = "^0.111.0"
 uvicorn = "^0.30.1"
 line-profiler = "^4.1.3"
@@ -25,6 +25,4 @@ requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.poetry.scripts]
-groqon = 'groqon.async_api.agroq:main'
-agroq = 'groqon.async_api.agroq:main'
-holyshit = 'groqon.cli:one'
+groqon = 'groqon.cli:one'

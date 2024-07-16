@@ -21,14 +21,15 @@ from pydantic import ValidationError
 from ..element_selectors import (
     CHAT_INPUT_SELECTOR,
     QUERY_SUBMIT_SELECTOR,
-    SIGNIN_TO_GROQ_BUTTON,
+    SIGNIN_BUTTON_SELECTOR,
+    SIGNIN_BUTTON_TEXT,
 )
 from ..groq_config import (
     ENDTOKEN,
     MODEL_LIST_FILE,
     PORT,
     URL,
-    groq_config_folder,
+    groq_error_folder,
     modelindex,
 )
 from ..logger import get_logger
@@ -85,7 +86,7 @@ class AgroqServer:
         self.worker_score = {worker_id: 0 for worker_id in self.worker_ids}
         
 
-    @log_function_call
+    # @log_function_call
     @profile
     async def astart(self) -> None:
         logger.debug('Agroq server starting...')
@@ -120,7 +121,11 @@ class AgroqServer:
         finally:
             # await self.astop()
             return None
-                
+    
+    def start(self):
+        asyncio.run(self.astart())
+        
+    
     async def wait_for_stop(self):
         await self.shutdown_event.wait()
         # self.server.close()
@@ -128,14 +133,14 @@ class AgroqServer:
         await self.astop()
         print("Server stopped.")
         
-    @log_function_call
+    # @log_function_call
     @profile
     async def handle_server_request(self, reader, writer):
         data = await reader.read(99999) # TODO: find something that gets all the incoming data
         is_http=False
         
         print('requests in queue: ',self.request_queue.qsize())
-        cc(f'>>>>>>> request: {data.decode()}', 'white', 'on_red')
+        logger.info(f'>>>>>>>> request: {data.decode()}')
         # Check if it's a regular asyncio request or a HTTP request
         if data.startswith(b'POST') or data.startswith(b'GET'):
             data = self.parse_http_request(data.decode())
@@ -145,12 +150,12 @@ class AgroqServer:
         # # Closing if endtoken is received
         if ENDTOKEN in data.decode() and self.request_queue.empty():
             
-            cc('Found endtoken. Exiting...', 'white', 'on_red')
+            # cc('Found endtoken. Exiting...', 'white', 'on_red')
             writer.write(b"Server stopped")
             await writer.drain()
             writer.close()
             await writer.wait_closed()
-            cc('Groqon Server stopped.', 'white', 'on_red')
+            # cc('Groqon Server stopped.', 'white', 'on_red')
             self.shutdown_event.set()  # Signal the main loop to stop
 
             return
@@ -220,7 +225,7 @@ class AgroqServer:
         else:
             return {}
         
-    @log_function_call
+    # @log_function_call
     @profile
     async def astop(self):
         self.running = False
@@ -250,6 +255,9 @@ class AgroqServer:
         logger.info("Groqon Server stopped.")
 
     
+    def stop(self):
+        asyncio.run(self.astop())
+        
     def reset(self):
         self.request_queue = Queue()
         self.response_queues = {i: Queue() for i in self.worker_ids}
@@ -257,7 +265,7 @@ class AgroqServer:
         
 
 
-    @log_function_call
+    # @log_function_call
     @profile        
     async def worker_task(self, context: BrowserContext, worker_id: str, queue: Queue) -> None:
         page = await context.new_page()
@@ -284,7 +292,7 @@ class AgroqServer:
                     # cc(f'n request: {self.n_request}', 'yellow', 'on_black')
                     self.worker_score[worker_id] = self.worker_score.get(worker_id, 0) + 1
 
-                    cc(self.worker_score, 'blue', 'on_white')
+                    # cc(self.worker_score, 'blue', 'on_white')
 
                     # cc('waiting after entering query response', 'red', 'on_white', ['bold', 'blink'])
                     response = await queue.get()
@@ -304,7 +312,7 @@ class AgroqServer:
         return None
     
         
-    @log_function_call
+    # @log_function_call
     @profile
     async def do_query(self, page: Page, query:str, queue: Queue) -> None:
         try:
@@ -337,17 +345,9 @@ class AgroqServer:
                     query=query
                 )
                             )
-            
-    async def is_signedin(self, page):
-        signin_button = await page.wait_for_selector(SIGNIN_TO_GROQ_BUTTON)
-        text = await signin_button.inner_text()
-        if 'sign in' in text.lower():
-            return False
-        else:
-            return True
+                    
         
-        
-    @log_function_call
+    # @log_function_call
     @profile
     async def setup_page(self, page: Page):
         # await page.route("**/**/*.woff2", lambda x:x.abort())
@@ -357,7 +357,7 @@ class AgroqServer:
         await page.route("https://api.groq.com/openai/v1/models", self.get_models_from_api_response)
         await page.goto(self.url, timeout=60 * 1000, wait_until='commit') # ["commit", "domcontentloaded", "load", "networkidle"]
 
-    @log_function_call
+    # @log_function_call
     @profile        
     async def handle_chat_completions(self, route: Route, request:Request, api_request_model: APIRequestModel, queue: Queue) -> None:
         request = route.request
@@ -385,7 +385,7 @@ class AgroqServer:
         response = set_local_id_and_query(api_request=api_request_model, api_response=response)
         await queue.put(response)
 
-
+    @profile        
     async def handle_streamed_response(self, response: Response, query: str) -> APIResponseModel:
         """Handle both streamed and non-streamed responses from the server."""
         status_code = response.status
@@ -397,14 +397,15 @@ class AgroqServer:
             try:
                 non_streamed_data = json.loads(body_str)
 
-                if 'error' in non_streamed_data.keys():
+                if "choices" in non_streamed_data:
+                    return self.process_non_streamed_response(non_streamed_data)
+
+                elif 'error' in non_streamed_data.keys():
                     logger.error(f"Error response received: for query {query} -{non_streamed_data}")
                     output = self.process_error_response(error_dict=non_streamed_data, status_code=status_code, query=query)
-                    write_dict_to_json(output.model_dump(), groq_config_folder, f"Error {query}.json")
+                    await write_dict_to_json(output.model_dump(), groq_error_folder, f"Error {query}.json")
                     return output
                 
-                elif "choices" in non_streamed_data:
-                    return self.process_non_streamed_response(non_streamed_data)
                 
             except json.JSONDecodeError:
                 pass  # Not a valid JSON, proceed with streamed response handling
@@ -435,10 +436,6 @@ class AgroqServer:
                     except json.JSONDecodeError:
                         logger.exception("Failed to decode JSON")
                         
-                # elif line.startswith('{"error"'):
-                #     output = self.process_error_response(error_line=line, status_code=status_code)
-                #     write_dict_to_json(output.model_dump(), groq_config_folder, f"Error {query}.json")
-                #     return output
             return APIResponseModel(
                 id=f"chatcmpl-{created}",
                 object="chat.completion",
@@ -460,16 +457,18 @@ class AgroqServer:
             logger.exception("Exception in handle_streamed_response", exc_info=e)
             return self.create_error_api_response(str(e))
 
+    @profile
     def process_non_streamed_response(self, data: Dict[str, Any]) -> APIResponseModel:
         """Process a non-streamed response."""
         return APIResponseModel(**data)
 
+    @profile
     def process_error_response(self, error_line: str=None, error_dict:dict=None, status_code: int = 500, query:str=None) -> APIResponseModel:
         """Process an error response using the ErrorResponse Pydantic model."""
         try:
             if error_line and error_dict is None:
                 error_dict = json.loads(error_line)
-                
+                            
             error_response = ErrorResponse(**error_dict)
             error = error_response.error
             return self.create_error_api_response(error_message=error.message,error_code=error.code, error_type=error.type, status_code=status_code, query=query)
@@ -477,6 +476,7 @@ class AgroqServer:
             logger.error(f"Failed to parse error response: {error_line}", exc_info=e)
             return self.create_error_api_response(error_message=f"An unknown error occurred: {error_line}")
 
+    @profile
     def create_error_api_response(self,error_message:str=None, error_code:str = 'Unknown error', error_type:str="unknown_type",query:str=None, status_code: int = 500) -> APIResponseModel:
         """Create an APIResponseModel instance for error responses."""
             
@@ -489,8 +489,6 @@ class AgroqServer:
             status_code=status_code,
             query=query
         )
-
-        
 
     @profile
     async def get_models_from_api_response(self, route: Route, *args, **kwargs):
@@ -514,7 +512,7 @@ class AgroqServer:
     def dict_to_byte(self, x:dict) -> bytes:
         return (json.dumps(x)).encode()
      
-    @log_function_call
+    # @log_function_call
     @profile
     async def get_cookie_or_login(self, url: str, cookie_file: str) -> List[Dict]:
         cookie = get_cookie(cookie_file) if file_exists(cookie_file) else None
@@ -524,46 +522,44 @@ class AgroqServer:
     Cookie not loaded!!!
     LOGIN REQUIRED!!!
     You have 100 seconds to login to groq.com, Make it quick!!! 
+    Use Google Accounts to login not the other one.
     page will close in 100 seconds, Your time started: {now()}
     .""",
             )
             cookie = await self.login_user()
-            print('type fo coookie',type(cookie))
             await save_cookie(cookie, cookie_file)
         return cookie
 
 
                 
-    @log_function_call
+    # # @log_function_call
     @profile
     async def login_user(self) -> list:
         async with async_playwright() as p:
             browser = await p.firefox.launch(headless=False)
             context = await browser.new_context()
             page = await context.new_page()
-
             await page.goto(self.url, timeout=60_000)
 
-            sec = 100
-            while sec > 0:
-                await page.wait_for_timeout(1000)
-                sec -= 1
-                
-                # TODO: break early if logged in or timeout
-                # if "groq.com" in page.url:
-                #     if await self.is_signedin(page):
-                #         sec = 0
+            max_wait_time = 100  # seconds
+            start_time = time.time()
 
+            while time.time() - start_time < max_wait_time:    
+                await page.wait_for_timeout(1_000)
+                                
+                # break early if logged in
+                if "groq.com" in page.url:
+                    try:
+                        response = await page.wait_for_selector(SIGNIN_BUTTON_SELECTOR)
+                        name = await response.inner_text()
+                        
+                        if name.strip().lower() not in  [SIGNIN_BUTTON_TEXT.strip().lower(), 'sign in ', 'signin']:
+                            print('name : ',name)
+                            break
+                    except:
+                        pass
             cookie = await context.cookies()
             logger.debug("login page closed!")
             await page.close()
         return cookie
-
-
-        
-def write_str_to_file(context, file_name):
-    with open(file_name, 'a') as f:
-        f.write(context)
-        f.write('\n')
-        
 

@@ -2,106 +2,206 @@
 
 This projects uses playwright to Access [GROQ](https://www.groq.com) using python
 
-## Inspiration(Story)
-On a long summer evening of april 2024 I was sitting in front of cranky old fan working on my [News-app](https://www.github.com/tikendraw/news-app). I needed a llm api to summarize the news articles. As a poor man I do not have money to buy llm subscription, I chose to use [Gemini](https://gemini.google.com) (limit 1 req/sec), it took avg 8-9 sec per request to process, felt dissapointed.
+## Table of Contents
+1. Introduction
+2. Installation
+3. CLI Usage
+  * Starting the CLI
+  * Configuring the CLI
+  * Starting the Server
+  * Querying the Server
+  * Stopping the Server
+4. Python API Usage
+  * Using the AgroqClient Class
+  * Using requests Library
+5. Key Features and Benefits
+6. Contribution
 
-At this point I have heard about Groq and its new LPU hardware that outputs insanely fast. 
-There wasn't any free api for poor people like me. So I decided to emulate the user using playwright and can query and get the llm response. Finally as the thousands of seconds passed I could manage to make it work. Now you can use groq.com as llm too. I did it for poor people. 
+## Introduction
+Groqon is a powerful package that provides a convenient interface to interact with large language models (LLMs) hosted on **Groq.com for FREE**, **No api is required**. It offers both a command-line interface (CLI) and a Python API for seamless integration into various workflows.
 
-## Working
 
+**Working**
 * It emulates user using playwright and queries the selected model and ouputs the response as a json object.
-* It uses cookie to login.(For the first time you have to login in under 120 seconds(browser will be open for 2 minutes), your cookies will be saved and will be used again next time you query)
+* It uses cookie to login.(For the first time you have to login in under 100 seconds(browser will be open for 100 sec), your cookies will be saved and will be used again next time you query).
 * This code doesn't share your cookie or any kind of data with anyone.
-* One way query.
+
+
+**Note**
+Groq has set some requests/minute limit per model. Once you hit the limit, you will get error response. Limit is 30req/min (not sure), so either use all different models (5 models * 30 req) =150 req, or just make fewer queries.
 
 ## Installation
 
-```
+To install the Groqon package, use pip:
+
+```bash
 pip install groqon
 ```
 make sure you have playwright installed, if not do this
-```
+```bash
 # install firefox
-playwright install firefox
+playwright install firefox 
 ```
 
-## Usage
-### CLI
+## CLI Usage
+The Groqon CLI provides several commands to interact with the Agroq server.
+
+  ### Configuring the Package
+  To configure Groqon settings:
+  ```bash
+  groqon config [OPTIONS]
+  ```
+  Options:
+
+  * `--cookie_file`, `-cf` : Set the cookie file path
+  * `--models`, `-m` : Set default models
+  * `--headless`, `-hl` : Set headless mode
+  * `--n_workers`, `-w` : Set number of workers
+  * `--reset_login`, `-rl` : Set reset login option
+  * `--verbose`, `-v` : Set verbose output
+  * `--print_output`, `-p` : Set print output option
+
+
+  ### Starting the Server
+  To start the Agroq server:
+  ```bash
+  groqon serve [OPTIONS]
+  ```
+  Options:
+
+  * `--cookie_file`, `-cf` : Path to the cookie file (default: ~/.groqon/groq_cookie.json)
+  * `--models`, `-m` : Comma-separated list of models to use
+  * `--headless`, `-hl` : Run in headless mode (default: True)
+  * `--n_workers`, `-w` : Number of worker windows (default: 1)
+  * `--reset_login`, `-rl` : Reset login information (default: False)
+  * `--verbose`, `-v` : Enable verbose output (default: False)
+
+
+  ### Querying the Server
+  To send a query to the server:
+  ```bash
+  groqon query 'who is megan fox?' [OPTIONS] 
+  ```
+  Options:
+
+  * `--save_dir` , `-o` : Directory to save the generated response
+  * `--models` , `-m` : Comma-separated list of models to use
+  * `--system_prompt` , `-sp` : System prompt for the query
+  * `--print_output` , `-p` : Print output to console (default: True)
+  * `--temperature` , `-t` : Temperature for text generation
+  * `--max_tokens` , `-mt` : Maximum number of tokens to generate
+  * `--stream` , `-s` : Enable streaming mode (default: True)
+  * `--top_p` , `-tp` : Top-p sampling parameter (do not use this)
+  * `--stop_server` , `-ss` : Stop the server after the query (default: False)
+
+
+  ### Stopping the Server
+  To stop the Agroq server:
+  ```bash
+  groqon stop
+  ```
+
+
+## Python API Usage
+  ### Making Requests to the Agroq Server
+  To use the Groqon package in your Python code:
+  
+  Make sure you have start groqon server with `groqon serve` command in the background
+  ```python
+  from groqon import AgroqClient, AgroqClientConfig
+
+  # Define the configuration
+  config = AgroqClientConfig(
+      headless=False,
+      models=['llama3-8b'], # can be llama3-70b , gemma-7b , gemma2, mixtral
+      system_prompt="You are a helpful assistant.",
+      print_output=True,
+      temperature=0.1,
+      max_tokens=2048,
+      stream=False
+  )
+
+  # Create an AgroqClient instance
+  agroq = AgroqClient(config=config)
+
+  # use Asynchronously =====================================
+
+  # Make a single query
+  async def single_query():
+      response = await agroq.multi_query_async("What is the capital of France?")
+      print(response)
+
+  # Make multiple queries
+  async def multiple_queries():
+      queries = [
+          "What is the capital of France?",
+          "Who wrote 'To Kill a Mockingbird'?",
+          "What is the largest planet in our solar system?"
+      ]
+      responses = await agroq.multi_query_async(queries)
+      for response in responses:
+          print(response)
+
+  # Run the async functions
+  import asyncio
+  asyncio.run(single_query())
+  asyncio.run(multiple_queries())
+
+
+  # use synchronously =====================================
+  agroq.multi_query([
+    'how old is sun',
+    'who is messi?'
+  ])
+
+  ```
+
+  ### Using wget or requests for API Calls
+  You can also make API calls to the Groqon server using wget or the requests library:
+  Using wget:
+  ```bash
+  wget -q -O - --header="Content-Type: application/json" --post-data '{"model": "gemma-7b-it","messages": [{"role": "system", "content": "Please try to provide useful, helpful and actionable answer"},{"role": "user", "content": "who is megan fox?"}],"temperature": 0.1,"max_tokens": 2048,"top_p": 1,"stream": true}' http://localhost:8888/
+  ```
+  Using requests:
+  ```python
+import requests
+
+url = "http://localhost:8888"
+data = {
+    "model": "gemma-7b-it",
+    "messages": [
+        {"role": "system", "content": "Please try to provide useful, helpful and actionable answers."},
+        {"role": "user", "content": "who is megan fox?"}
+    ],
+    "temperature": 0.1,
+    "max_tokens": 2048,
+    "top_p": 1,
+    "stream": True
+}
+headers = {"Content-Type": "application/json"}
+
+response = requests.post(url, json=data, headers=headers)
+print(response.json())
 ```
-groqon "how old is sun" "how to fuck around and find out"\
-    --model llama3-70b\
-    --output_dir ./output/\
-```
-### Code
-```
-from groqon.async_api import agroq
 
-# pass single query
-agroq('how old is earth', model='llama3-70b')
+## Key Features and Benefits
 
-# pass list of query
-agroq(["Is aunt may peter parker's actual mother?", "kya gangadhar hi shaktimaan hai?"], model='llama3-70b')
+* **Fast Inference**: Groqon leverages the power of Groq's API to provide rapid inference for large language models, significantly reducing the time required for generating responses.
+* **Multiple Model** Support: The package supports various LLMs, allowing users to choose the most suitable model for their specific tasks.
+* **Asynchronous Processing**: With its asynchronous design, Groqon can handle multiple queries simultaneously, improving overall throughput and efficiency.
+* **Flexible Configuration**: Users can easily customize settings such as temperature, max tokens, and system prompts to fine-tune the model's behavior.
+* **CLI and Python API** : Groqon offers both a command-line interface for quick interactions and a Python API for seamless integration into existing codebases.
+* **Error Handling**: Robust error handling ensures that issues are caught and reported, improving the reliability of the system.
+* **Save and  Print Options**: Users can save generated responses to files and control whether outputs are printed to the console.
+* **HTTP Interface**: The server supports HTTP requests, making it easy to integrate with web applications and other services.
+* **Worker Management**: The server uses multiple workers to handle requests efficiently, improving concurrency and responsiveness.
 
-# pass other parameters
-agroq(
-    'Why am I awake at 2.30 AM?',
-    model_list='llama3-70b', 
-    cookie_file="./groq_cookie.json", 
-    headless=False,
-    save_dir='./newresponses/',
-    system_prompt="you are jarvis/vision assistant from Ironman and marvel movie, and assistant of me, call me sir",
-    print_output=True
-    )
-```
-## help
+By leveraging these features, Groqon provides a powerful and flexible solution for interacting with large language models, making it an excellent choice for developers and researchers working on natural language processing tasks.
 
-```
-agroq --help
-usage: agroq [-h] [--model_list MODEL_LIST [MODEL_LIST ...]] [--cookie_file COOKIE_FILE] [--system_prompt SYSTEM_PROMPT] [--headless HEADLESS] [--output_dir OUTPUT_DIR] [--temperature TEMPERATURE]
-             [--max_tokens MAX_TOKENS] [--n_workers N_WORKERS]
-             queries [queries ...]
-
-positional arguments:
-  queries               one or more quoted string like 'what is the purpose of life?' 'why everyone hates meg griffin?'
-
-options:
-  -h, --help            show this help message and exit
-  --model_list MODEL_LIST [MODEL_LIST ...]
-                        Available models are gemma-7b-it llama3-70b-8192 llama3-8b-8192 mixtral-8x7b-32768, e.g enter as --model_list 'llama3-8b' 'gemma-7b'
-  --cookie_file COOKIE_FILE
-                        looks in current directory by default for groq_cookie.json. If not found, You will have to login when the browswer opens under 120 seconds. It's one time thing
-  --system_prompt SYSTEM_PROMPT
-                        System prompt to be given to the llm model. Its like 'you are samuel l jackson as my assistant'. Default is None.
-  --headless HEADLESS   set true to not see the browser
-  --output_dir OUTPUT_DIR
-                        Path to save the output file. Defaults to current working directory.
-  --temperature TEMPERATURE
-                        Temperature value
-  --max_tokens MAX_TOKENS
-                        Maximum number of tokens (upper limit)
-  --n_workers N_WORKERS
-                        Number of browers instances to work simultaneously. Keep between 1-8 (eats up ram)
-  --reset_login RESET_LOGIN
-                        If set the flag, it will delete the groq_cookie.json file and you have to login again
-
-
-```
-
-## TODO (Need Help)
-
-* [x] Set System Prompt
-* [ ] Keep updated
-* [ ] Add something
-* [ ] Use Better parser
-* [x] Use color for better Visual / Rich text formatting
-* [x] Add logger
-* [ ] Multiround chat
 
 ## Contribution
+Feel free to contibute your ideas, features.
 
-Feel free to add features and keep it maintained and do pull requests.
-
-## Buy me a Coffee/Chai
+## Buy me a Coffee
 [!["Buy Me A Coffee"](https://www.buymeacoffee.com/assets/img/custom_images/orange_img.png)](https://buymeacoffee.com/tikendraw)
 

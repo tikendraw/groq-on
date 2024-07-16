@@ -16,7 +16,8 @@ PROMPT_SAVE_BUTTON_SELECTOR = r"html.__variable_b1da2a.__variable_aaf875.dark bo
 COPY_BUTTON_SELECTOR = r"body > main > div > div.grow.w-full.overflow-auto.mt-2.flex.flex-col.md\:flex-col > div.flex.flex-col.\[word-break\:break-word\].mb-6 > div.flex.flex-col.font-normal.text-base.border-l.border-mutedaccent.px-5 > div.flex.flex-row.align-center.items-center.gap-4.pt-4 > div:nth-child(1) > svg"
 MODEL_NAME_SELECTOR = r"body > header > div.flex-1.flex.items-center.justify-center.md\:col-span-4.md\:col-start-2 > div > button > p"
 
-SIGNIN_BUTTON_SELECTOR = r"#radix-\:r6\:"
+SIGNIN_BUTTON_SELECTOR = r"#radix-\:r5\:"
 SIGNIN_BUTTON_TEXT = "Sign in to Groq"
 SIGNIN_TO_GROQ_BUTTON = "/html/body/footer/div[1]/div[1]/button[2]"
 WHISPER_MIC_BUTTON_SELECTOR  = r'body > main > div > div.hidden.md\:block.w-full > div > div.order-2.md\:order-1 > form > div > div > button'
+NAME_SELECTOR = r'#radix-\:R4nnkpla\: > span:nth-child(2)'

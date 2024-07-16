@@ -1,5 +1,8 @@
 # Changelog
 
+## 15-07-2024
+* groqon stop now works as expected
+
 ## 11-07-2024
 * added server client feature
 * processes queries asynchronosly

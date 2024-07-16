@@ -23,8 +23,9 @@ Groqon is a powerful package that provides a convenient interface to interact wi
 
 **Working**
 * It emulates user using playwright and queries the selected model and ouputs the response as a json object.
+* You have to login for the first time with google account.
 * It uses cookie to login.(For the first time you have to login in under 100 seconds(browser will be open for 100 sec), your cookies will be saved and will be used again next time you query).
-* This code doesn't share your cookie or any kind of data with anyone.
+* This code doesn't share your cookie or any kind of data with anyone. Your data is saved locally in `/home/username/.groqon` folder. 
 
 
 **Note**
@@ -46,8 +47,41 @@ playwright install firefox
 ## CLI Usage
 The Groqon CLI provides several commands to interact with the Agroq server.
 
+
+  ### Starting the Server
+  To start the Agroq server:
+  ```bash
+  groqon serve [OPTIONS] -w 4
+  ```
+  Options:
+
+  * `--cookie_file`, `-cf` : Path to the cookie file (default: ~/.groqon/groq_cookie.json)
+  * `--models`, `-m` : Comma-separated list of models to use
+  * `--headless`, `-hl` : Run in headless mode (default: True)
+  * `--n_workers`, `-w` : Number of worker windows (default: 2) (the more the better) (its like opening browser windows, so it will eat ram, do not go crazy with number, 2-8 is a good number)
+  * `--reset_login`, `-rl` : Reset login information (default: False)
+  * `--verbose`, `-v` : Enable verbose output (default: False)
+
+
+  ### Querying the Server
+  To send a query to the server:
+  ```bash
+  groqon query 'who is megan fox?' [OPTIONS] 
+  ```
+  Options:
+
+  * `--save_dir` , `-o` : Directory to save the generated response
+  * `--models` , `-m` : Comma-separated(no spaces) model names to use e.g. -m llama3-8b,gemma2,mixtral,gemma,llama3-70b
+  * `--system_prompt` , `-sp` : System prompt for the query
+  * `--print_output` , `-p` : Print output to console (default: True)
+  * `--temperature` , `-t` : Temperature for text generation
+  * `--max_tokens` , `-mt` : Maximum number of tokens to generate
+  * `--stream` , `-s` : Enable streaming mode (default: True)
+  * `--top_p` , `-tp` : Top-p sampling parameter (do not use this)
+  * `--stop_server` , `-ss` : Stop the server after the query (default: False)
+
   ### Configuring the Package
-  To configure Groqon settings:
+  To configure Groqon settings: (You do not have to do it. It has default settings)
   ```bash
   groqon config [OPTIONS]
   ```
@@ -61,38 +95,6 @@ The Groqon CLI provides several commands to interact with the Agroq server.
   * `--verbose`, `-v` : Set verbose output
   * `--print_output`, `-p` : Set print output option
 
-
-  ### Starting the Server
-  To start the Agroq server:
-  ```bash
-  groqon serve [OPTIONS]
-  ```
-  Options:
-
-  * `--cookie_file`, `-cf` : Path to the cookie file (default: ~/.groqon/groq_cookie.json)
-  * `--models`, `-m` : Comma-separated list of models to use
-  * `--headless`, `-hl` : Run in headless mode (default: True)
-  * `--n_workers`, `-w` : Number of worker windows (default: 1)
-  * `--reset_login`, `-rl` : Reset login information (default: False)
-  * `--verbose`, `-v` : Enable verbose output (default: False)
-
-
-  ### Querying the Server
-  To send a query to the server:
-  ```bash
-  groqon query 'who is megan fox?' [OPTIONS] 
-  ```
-  Options:
-
-  * `--save_dir` , `-o` : Directory to save the generated response
-  * `--models` , `-m` : Comma-separated list of models to use
-  * `--system_prompt` , `-sp` : System prompt for the query
-  * `--print_output` , `-p` : Print output to console (default: True)
-  * `--temperature` , `-t` : Temperature for text generation
-  * `--max_tokens` , `-mt` : Maximum number of tokens to generate
-  * `--stream` , `-s` : Enable streaming mode (default: True)
-  * `--top_p` , `-tp` : Top-p sampling parameter (do not use this)
-  * `--stop_server` , `-ss` : Stop the server after the query (default: False)
 
 
   ### Stopping the Server

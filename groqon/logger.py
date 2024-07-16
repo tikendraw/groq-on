@@ -15,7 +15,7 @@ LOGGING_CONFIG = {
     },
     "handlers": {
         "file": {
-            "level": "DEBUG",
+            "level": "ERROR",
             "class": "logging.FileHandler",
             "filename": os.path.join(groq_config_folder, "groqon.log"),
             "formatter": "detailed",

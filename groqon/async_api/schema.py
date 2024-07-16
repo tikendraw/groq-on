@@ -1,7 +1,7 @@
 
 import json
 from pathlib import Path
-from typing import Any, Dict, List, Union
+from typing import Any, Dict, List, Optional, Union
 
 from pydantic import BaseModel
 
@@ -17,9 +17,9 @@ from ..groq_config import (
 
 
 class ErrorModel(BaseModel):
-    message: str
-    type: str
-    code: str
+    message: str | None = None
+    type: str|None = None
+    code: str|None = None
 
 
 class ErrorResponse(BaseModel):

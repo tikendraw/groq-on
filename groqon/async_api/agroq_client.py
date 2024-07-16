@@ -11,7 +11,6 @@ from ..logger import get_logger
 from ..utils import cc, log_function_call
 from ..utils import get_current_time_str as now
 from .agroq_utils import (
-    async_generator_from_iterables,
     get_model_from_name,
     print_model_response,
     write_dict_to_json,
@@ -28,7 +27,8 @@ class AgroqClient(BaseModel):
     config: AgroqClientConfig
     _PORT: Optional[int] = PORT
 
-    @log_function_call
+
+    # @log_function_call
     async def multi_query_async(
         self,
         query: Union[str, List[str]]=None,
@@ -39,6 +39,8 @@ class AgroqClient(BaseModel):
         top_p: Union[int, List[int]] = None,
         stream: bool = True,
         stop_server:bool = False
+        
+        
     ) -> list[Dict[str, Any]]:
 
         if query is None and stop_server:
@@ -118,12 +120,12 @@ class AgroqClient(BaseModel):
         responses = await asyncio.gather(*tasks)
         return [r for r in responses if r is not None]
     
-    @log_function_call
+    # @log_function_call
     async def send_requestmodel(self, request: APIRequestModel):
         request_byte = request.model_dump_json()
         return await self.tcp_client(request_byte)
 
-    @log_function_call
+    # @log_function_call
     async def tcp_client(self, message: str) -> dict:
         try:
             reader, writer = await asyncio.open_connection('127.0.0.1', self._PORT)
@@ -141,7 +143,7 @@ class AgroqClient(BaseModel):
             logger.error(f"Error in TCP client: {e}")
             raise e
 
-    @log_function_call
+    # @log_function_call
     def make_request_model(self, query: str, **kwargs) -> APIRequestModel:
         return APIRequestModel(
             local_id=kwargs.get('id', str(uuid.uuid4())),
@@ -152,3 +154,28 @@ class AgroqClient(BaseModel):
             max_tokens=kwargs.get('max_tokens', self.config.max_tokens),
             stream = kwargs.get('stream', self.config.stream)
         )
+        
+    def multi_query(
+        self,
+        query: Union[str, List[str]]=None,
+        model: Union[str, List[str]] = None, 
+        system_prompt: Union[str, List[str]] = None, 
+        temperature: Union[float, List[float]] = None,
+        max_tokens: Union[int, List[int]] = None,
+        top_p: Union[int, List[int]] = None,
+        stream: bool = True,
+        stop_server:bool = False
+    ) -> list[Dict[str, Any]]:
+        """
+        Non-asynchronous version of multi_query_async.
+        """
+        return asyncio.run(self.multi_query_async(
+            query=query,
+            model=model,
+            system_prompt=system_prompt,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            top_p=top_p,
+            stream=stream,
+            stop_server=stop_server
+        ))

@@ -4,7 +4,11 @@ from pathlib import Path
 from .utils import get_model_ids, save_config
 
 home_dir = os.path.expanduser("~")
-groq_config_folder = os.path.join(home_dir, ".groqon")
+groq_config_folder = Path(os.path.join(home_dir, ".groqon"))
+groq_config_folder.mkdir(exist_ok=True)
+groq_error_folder = groq_config_folder / 'errors'
+groq_error_folder.mkdir(exist_ok=True)
+
 GROQON_CONFIG_FILE = Path(groq_config_folder) / "config.yaml"
 GROQ_COOKIE_FILE = Path(groq_config_folder) / "groq_cookie.json"
 MODEL_LIST_FILE = Path(groq_config_folder) / "models.json"

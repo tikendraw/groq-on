@@ -157,3 +157,65 @@ def set_local_id_and_query(api_request:APIRequestModel, api_response:APIResponse
     api_response.query  = api_request.get_query()
     return api_response
 
+
+
+# function calling support
+
+class ParameterProperties(BaseModel):
+    type: str
+    description: Optional[str] = None
+
+class Parameters(BaseModel):
+    type: str
+    properties: dict[str, ParameterProperties]
+    required: List[str]
+
+class FunctionModel(BaseModel):
+    name: str
+    description: Optional[str] = None
+    parameters: Parameters
+
+class FunctionCallModel(BaseModel):
+    name: str
+
+class ToolModel(BaseModel):
+    type:str
+    function:FunctionModel
+    
+class APIRequestModelFunctionCall(BaseModel):
+    model: str = DEFAULT_MODEL
+    messages: List[MessageModel]
+    functions: List[FunctionModel]
+    function_call: FunctionCallModel
+    temperature: float = TEMPERATURE
+    max_tokens: int = MAX_TOKENS
+    top_p: float = TOP_P
+    stream: bool = STREAM
+    
+
+class FunctionCallResponseModel(BaseModel):
+    name: str
+    arguments: Dict[str, Any]
+
+class MessageResponseModel(BaseModel):
+    role: str
+    content: Optional[str] = None
+    function_call: Optional[FunctionCallResponseModel] = None
+
+class ChoiceModel2(BaseModel):
+    index: int
+    message: MessageResponseModel
+    finish_reason: Optional[str] = None
+
+
+class APIResponseModelFunctionCall(BaseModel):
+    local_id: Optional[str] = None
+    query: Optional[str] = None
+    id: str 
+    object: str
+    created: int
+    model: str
+    choices: List[ChoiceModel]
+    usage: Dict[str, Any]
+    system_fingerprint: Optional[str] = None
+    x_groq: Optional[Xgroq]

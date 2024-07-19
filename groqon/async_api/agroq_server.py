@@ -6,6 +6,7 @@ from asyncio import Queue, QueueEmpty
 from typing import Any, Dict, List
 from urllib.parse import parse_qs
 
+from aiohttp import web
 from icecream import ic
 from line_profiler import profile
 from playwright.async_api import (
@@ -79,14 +80,16 @@ class AgroqServer:
         self.request_queue = Queue()
         self.output_queue = Queue()
         self.shutdown_event = asyncio.Event()
-
+        self.app = web.Application()
+        self.app.router.add_post('/chat/completions', self.handle_server_request)
+        
     def set_worker_attrs(self, n_workers):
         self.worker_ids = [f'worker_{i}' for i in range(self.config.n_workers)]
         self.workers_dict = {worker_id: None for worker_id in self.worker_ids}
         self.worker_score = {worker_id: 0 for worker_id in self.worker_ids}
         
 
-    # @log_function_call
+    @log_function_call
     @profile
     async def astart(self) -> None:
         logger.debug('Agroq server starting...')
@@ -101,20 +104,19 @@ class AgroqServer:
                 await context.add_cookies(cookie)
 
                 for worker_id in self.worker_ids:
-                    worker = asyncio.create_task(self.worker_task(context, worker_id=worker_id, queue=self.response_queues[worker_id]))
+                    worker = asyncio.create_task(self.worker_task(context, worker_id=worker_id))
                     self.workers_dict[worker_id] = worker
 
-                self.server = await asyncio.start_server(self.handle_server_request, '127.0.0.1', self._PORT)
+                runner = web.AppRunner(self.app)
+                await runner.setup()
+                site = web.TCPSite(runner, '127.0.0.1', self._PORT)
+                await site.start()
 
-                addrs = ', '.join(str(sock.getsockname()) for sock in self.server.sockets)
-                logger.info(f'Serving on {addrs}')
+                logger.info(f'Serving on http://127.0.0.1:{self._PORT}')
                 
-                async with self.server:
-                    # Run server and wait for stop event
-                    await asyncio.gather(
-                        self.server.serve_forever(),
-                        self.wait_for_stop()
-                    )
+                # Wait for stop event
+                await self.wait_for_stop()
+
 
         except Exception as e:
             logger.exception("Error in astart", exc_info=e)
@@ -133,99 +135,43 @@ class AgroqServer:
         await self.astop()
         print("Server stopped.")
         
-    # @log_function_call
+    @log_function_call
     @profile
-    async def handle_server_request(self, reader, writer):
-        data = await reader.read(99999) # TODO: find something that gets all the incoming data
-        is_http=False
-        
-        print('requests in queue: ',self.request_queue.qsize())
-        logger.info(f'>>>>>>>> request: {data.decode()}')
-        # Check if it's a regular asyncio request or a HTTP request
-        if data.startswith(b'POST') or data.startswith(b'GET'):
-            data = self.parse_http_request(data.decode())
-            data = self.dict_to_byte(data)
-            is_http =True
+    async def handle_server_request(self, request: web.Request) -> web.Response:
+        try:
+            data = await request.json()
             
-        # # Closing if endtoken is received
-        if ENDTOKEN in data.decode() and self.request_queue.empty():
+            print('requests in queue: ',self.request_queue.qsize())
+            logger.info(f'>>>>>>>> request: {data}')
             
-            # cc('Found endtoken. Exiting...', 'white', 'on_red')
-            writer.write(b"Server stopped")
-            await writer.drain()
-            writer.close()
-            await writer.wait_closed()
-            # cc('Groqon Server stopped.', 'white', 'on_red')
-            self.shutdown_event.set()  # Signal the main loop to stop
+            cc(f"{data}", 'red', 'on_black')
+            mm = APIRequestModel(**data)
 
-            return
-        
-        mm_dict = self.byte_to_model_kwargs(data)
-        mm = APIRequestModel(**mm_dict)
+            self.request_queue.put_nowait(mm)
+            self.n_request +=1
 
-        self.request_queue.put_nowait(mm)
-        self.n_request +=1
-
-        # do not put anything above the code: it passes without any output
-        response =  await self.output_queue.get()
-        
-        if response:
-            logger.info(f'<<<<<<< response: server side : {response.model_dump()}')
-            await self.send_response(writer, response, is_http)
-
-        await writer.wait_closed()
-        
-    async def send_response(self, writer, response, is_http: bool):
-        if is_http:
-            response_json = response.model_dump_json()
-            http_response = (
-                b"HTTP/1.1 200 OK\r\n"
-                b"Content-Type: application/json\r\n"
-                b"Content-Length: " + str(len(response_json)).encode() + b"\r\n"
-                b"Content-Disposition: inline\r\n"  # This tells the client to display the content inline
-                b"X-Content-Type-Options: nosniff\r\n"  # This prevents MIME type sniffing
-                b"\r\n" + response_json.encode()
-            )
-            writer.write(http_response)
-        else:
-            # For regular asyncio requests, send the response as before
-            response_byte = self.model_to_byte(response)
-            writer.write(response_byte)
-        
-        await writer.drain()
-        writer.close()
-        
-
-    def parse_http_request(self, request_str: str) -> Dict:
-        # Split the request into headers and body
-        headers, _, body = request_str.partition('\r\n\r\n')
-        
-        # Parse the request line
-        request_line = headers.split('\r\n')[0]
-        method, path, _ = request_line.split(' ')
-
-        # Parse query parameters if it's a GET request
-        if method == 'GET':
-            query_params = parse_qs(path.split('?')[1]) if '?' in path else {}
-            return {k: v[0] for k, v in query_params.items()}
-        
-        # For POST requests, parse the body
-        elif method == 'POST':
-            content_type = next((line.split(': ')[1] for line in headers.split('\r\n') if line.startswith('Content-Type:')), None)
+            # do not put anything above the code: it passes without any output
+            response =  await self.output_queue.get()
             
-            if content_type == 'application/json':
-                return json.loads(body)
-            elif content_type == 'application/x-www-form-urlencoded':
-                return {k: v[0] for k, v in parse_qs(body).items()}
+            if response:
+                logger.info(f'<<<<<<< response: server side : {response.model_dump()}')
+                return web.json_response(response.model_dump())
             else:
-                # Handle other content types as needed
-                return {}
-        
-        # Handle other HTTP methods as needed
-        else:
-            return {}
-        
-    # @log_function_call
+                raise web.HTTPInternalServerError(text="No response received from workers")
+
+        except Exception as e:
+            logger.exception("Error in handle_chat_completions", exc_info=e)
+            return web.json_response(
+                self.create_error_api_response(
+                    error_message=str(e),
+                    error_code="internal_server_error",
+                    error_type="server_error",
+                    status_code=500
+                ).model_dump(),
+                status=500
+            )
+                    
+    @log_function_call
     @profile
     async def astop(self):
         self.running = False
@@ -245,14 +191,14 @@ class AgroqServer:
                     logger.error(f"Error while cancelling worker {worker_id}: {e}")
 
 
-        self.server.close()
-        await self.server.wait_closed()
-            
+        await self.app.shutdown()
+        await self.app.cleanup()            
 
         # Cancel any remaining tasks and clear queues
         self.workers_dict.clear()
         self.reset()
         logger.info("Groqon Server stopped.")
+
 
     
     def stop(self):
@@ -264,42 +210,33 @@ class AgroqServer:
         self.output_queue = Queue()
         
 
-
-    # @log_function_call
+    @log_function_call
     @profile        
-    async def worker_task(self, context: BrowserContext, worker_id: str, queue: Queue) -> None:
+    async def worker_task(self, context: BrowserContext, worker_id: str) -> None:
         page = await context.new_page()
         await self.setup_page(page)
-
+        queue = self.response_queues[worker_id]
         while self.running:
             
             try:
-                try:
-                    request_model = await self.request_queue.get()
-                except QueueEmpty:
-                    continue
+                request_model = await self.request_queue.get()
 
-                if request_model:
-                    # cc(f'{worker_id} is processing request:({request_model.model}):{request_model.query}', 'red', 'on_black')
+                async def wrapper_handle_chat_completions(route: Route, request: Request):
+                    await self.handle_chat_completions(route, request, request_model, queue)
 
-                    async def wrapper_handle_chat_completions(route: Route, request: Request):
-                        await self.handle_chat_completions(route, request, request_model, queue)
+                await page.route("**/**/chat/completions", wrapper_handle_chat_completions)
+                await self.do_query(page, query=request_model.get_query(), queue=queue)
 
-                    await page.route("**/**/chat/completions", wrapper_handle_chat_completions)
-                    await self.do_query(page, query=request_model.get_query(), queue=queue)
-                    self.request_queue.task_done()
-                    self.n_request -= 1
-                    # cc(f'n request: {self.n_request}', 'yellow', 'on_black')
-                    self.worker_score[worker_id] = self.worker_score.get(worker_id, 0) + 1
+                response = await queue.get()
+                
+                if response:                       
+                    self.output_queue.put_nowait(response)
+                queue.task_done()
 
-                    # cc(self.worker_score, 'blue', 'on_white')
+                self.request_queue.task_done()
+                self.n_request -= 1
+                self.worker_score[worker_id] = self.worker_score.get(worker_id, 0) + 1
 
-                    # cc('waiting after entering query response', 'red', 'on_white', ['bold', 'blink'])
-                    response = await queue.get()
-                    
-                    if response:                       
-                        self.output_queue.put_nowait(response)
-                    queue.task_done()
                     
                     
             except asyncio.CancelledError:
@@ -309,10 +246,9 @@ class AgroqServer:
                 break
 
         await page.close()
-        return None
     
         
-    # @log_function_call
+    @log_function_call
     @profile
     async def do_query(self, page: Page, query:str, queue: Queue) -> None:
         try:
@@ -347,7 +283,7 @@ class AgroqServer:
                             )
                     
         
-    # @log_function_call
+    @log_function_call
     @profile
     async def setup_page(self, page: Page):
         # await page.route("**/**/*.woff2", lambda x:x.abort())
@@ -357,7 +293,7 @@ class AgroqServer:
         await page.route("https://api.groq.com/openai/v1/models", self.get_models_from_api_response)
         await page.goto(self.url, timeout=60 * 1000, wait_until='commit') # ["commit", "domcontentloaded", "load", "networkidle"]
 
-    # @log_function_call
+    @log_function_call
     @profile        
     async def handle_chat_completions(self, route: Route, request:Request, api_request_model: APIRequestModel, queue: Queue) -> None:
         request = route.request
@@ -512,7 +448,7 @@ class AgroqServer:
     def dict_to_byte(self, x:dict) -> bytes:
         return (json.dumps(x)).encode()
      
-    # @log_function_call
+    @log_function_call
     @profile
     async def get_cookie_or_login(self, url: str, cookie_file: str) -> List[Dict]:
         cookie = get_cookie(cookie_file) if file_exists(cookie_file) else None
@@ -532,7 +468,7 @@ class AgroqServer:
 
 
                 
-    # # @log_function_call
+    # @log_function_call
     @profile
     async def login_user(self) -> list:
         async with async_playwright() as p:

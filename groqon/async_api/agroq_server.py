@@ -175,6 +175,40 @@ class AgroqServer:
 
         await writer.wait_closed()
         
+        
+    async def add_to_request_queue(self, request:dict| APIRequestModel):
+        if isinstance(request, dict):
+            request = APIRequestModel(**request)
+        
+        self.request_queue.put_nowait(request)
+        self.n_request += 1
+        
+    async def get_all_response(self, local_ids:list):
+        
+        put_back_to_output_queue =[]
+        responses = []
+
+        if not isinstance(local_ids, list):
+            local_ids = [local_ids]
+                
+        while True:
+            try:
+                response = await self.output_queue.get()
+                if response.local_id in local_ids:
+                    responses.append(response)
+                else:
+                    put_back_to_output_queue.append(response)
+            except QueueEmpty:
+                break
+            finally:
+                self.output_queue.task_done()
+            
+        if put_back_to_output_queue:
+            for i in put_back_to_output_queue:
+                self.output_queue.put_nowait(i)
+                
+        return responses
+    
     async def send_response(self, writer, response, is_http: bool):
         if is_http:
             response_json = response.model_dump_json()
@@ -245,8 +279,9 @@ class AgroqServer:
                     logger.error(f"Error while cancelling worker {worker_id}: {e}")
 
 
-        self.server.close()
-        await self.server.wait_closed()
+        if hasattr(self, 'server'):
+            self.server.close()
+            await self.server.wait_closed()
             
 
         # Cancel any remaining tasks and clear queues

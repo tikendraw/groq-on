@@ -556,7 +556,8 @@ class AgroqServer:
                         if name.strip().lower() not in  [SIGNIN_BUTTON_TEXT.strip().lower(), 'sign in ', 'signin']:
                             print('name : ',name)
                             break
-                    except:
+                    except Exception as e:
+                        logger.error('Exception while checking if logged in (Not a Problem)', exc_info=e)
                         pass
             cookie = await context.cookies()
             logger.debug("login page closed!")

@@ -501,31 +501,6 @@ class AgroqServer:
     def process_streamed_response(self, data: Dict[str, Any]) -> ChatCompletionChunk:
         return ChatCompletionChunk(**data)
 
-    @profile
-    def process_error_response(
-        self,
-        error_line: str = None,
-        error_dict: dict = None,
-    ) -> ErrorResponse:
-        """Process an error response using the ErrorResponse Pydantic model."""
-        try:
-            if error_line and error_dict is None:
-                error_dict = json.loads(error_line)
-
-            error_response = ErrorResponse(**error_dict)
-            error = error_response.error
-            return self.create_error_api_response(
-                error_message=error.message,
-                error_code=error.code,
-                error_type=error.type,
-            )
-        except (json.JSONDecodeError, ValidationError) as e:
-            logger.error(f"Failed to parse error response: {error_line}", exc_info=e)
-            return self.create_error_api_response(
-                error_message=f"An unknown error occurred: {error_line}"
-            )
-
-    @profile
     def create_error_api_response(
         self,
         error_message: str = None,

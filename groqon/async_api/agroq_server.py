@@ -51,11 +51,6 @@ from .schema import (
 )
 
 logger = get_logger(__name__)
-ic.disable()
-
-
-class EndTokenFoundError(Exception):
-    pass
 
 
 class AgroqServer:
@@ -102,21 +97,21 @@ class AgroqServer:
                     for worker_id in self.worker_ids
                 ]
 
-                self.server = await asyncio.start_server(
-                    self.handle_server_request, "127.0.0.1", self._PORT
-                )
+                # self.server = await asyncio.start_server(
+                #     self.handle_server_request, "127.0.0.1", self._PORT
+                # )
 
-                addrs = ", ".join(
-                    str(sock.getsockname()) for sock in self.server.sockets
-                )
-                logger.info(f"Serving on {addrs}")
+                # addrs = ", ".join(
+                #     str(sock.getsockname()) for sock in self.server.sockets
+                # )
+                # logger.info(f"Serving on {addrs}")
 
-                async with self.server:
+                # async with self.server:
                     # Run server and wait for stop event
-                    await asyncio.gather(
-                        self.server.serve_forever(),
-                        self.wait_for_stop(),
-                        *self.worker_tasks,
+                await asyncio.gather(
+                    # self.server.serve_forever(),
+                    self.wait_for_stop(),
+                    *self.worker_tasks,
                     )
 
         except Exception as e:
@@ -135,37 +130,46 @@ class AgroqServer:
         await self.astop()
         print("Server stopped.")
 
-    async def handle_server_request(self, reader, writer):
-        intime = time.perf_counter_ns()
-        data = await self.read_full_request(reader)
-        logger.info(f">>>>>>>> request: {intime} -{data.decode()}")
+    # async def handle_server_request(self, reader, writer):
+    #     intime = time.perf_counter_ns()
+    #     data = await self.read_full_request(reader)
+    #     logger.info(f">>>>>>>> request: {intime} -{data.decode()}")
 
-        if ENDTOKEN in data.decode() and self.request_queue.empty():
-            writer.write(b"Server stopped")
-            await writer.drain()
-            writer.close()
-            await writer.wait_closed()
+    #     if ENDTOKEN in data.decode() and self.request_queue.empty():
+    #         writer.write(b"Server stopped")
+    #         await writer.drain()
+    #         writer.close()
+    #         await writer.wait_closed()
+    #         self.shutdown_event.set()
+    #         return
+
+    #     parsed_data = (
+    #         self.parse_http_request(data.decode())
+    #         if data.startswith(b"POST") or data.startswith(b"GET")
+    #         else None
+    #     )
+    #     if parsed_data:
+    #         response = self.process_request(parsed_data)
+    #         if response:
+    #             outtime = time.perf_counter_ns()
+    #             logger.info(
+    #                 f"<<<<<< response: {outtime} took {(outtime - intime):,}ns -{response}"
+    #             )
+    #             await self.send_response(writer, response)
+    #     else:
+    #         writer.close()
+    #         await writer.wait_closed()
+    
+    async def process_request(self, request: dict | GROQ_APIRequest):
+        
+        if ENDTOKEN in str(request) and self.request_queue.empty():
             self.shutdown_event.set()
             return
-
-        parsed_data = (
-            self.parse_http_request(data.decode())
-            if data.startswith(b"POST") or data.startswith(b"GET")
-            else None
-        )
-        if parsed_data:
-            await self.add_to_request_queue(parsed_data)
-            response = await self.output_queue.get()
-            if response:
-                outtime = time.perf_counter_ns()
-                logger.info(
-                    f"<<<<<< response: {outtime} took {(outtime - intime):,}ns -{response}"
-                )
-                await self.send_response(writer, response)
-        else:
-            writer.close()
-            await writer.wait_closed()
-
+        
+        await self.add_to_request_queue(request)
+        response = await self.output_queue.get()
+        return response
+    
     async def read_full_request(self, reader):
         # Read headers
         headers = await reader.readuntil(b"\r\n\r\n")
@@ -307,12 +311,11 @@ class AgroqServer:
                 except Exception as e:
                     logger.error(f"Error while cancelling worker: {e}")
 
-        if hasattr(self, "server"):
-            self.server.close()
-            await self.server.wait_closed()
+        # if hasattr(self, "server"):
+        #     self.server.close()
+        #     await self.server.wait_closed()
 
         # Cancel any remaining tasks and clear queues
-        self.workers_dict.clear()
         self.reset()
         logger.info("Groqon Server stopped.")
 
@@ -401,9 +404,9 @@ class AgroqServer:
     @log_function_call
     @profile
     async def setup_page(self, page: Page):
-        # await page.route("**/**/*.woff2", lambda x:x.abort())
-        # await page.route("**/**/*.woff", lambda x:x.abort())
-        # await page.route("**/**/*.css", lambda x:x.abort())
+        await page.route("**/**/*.woff2", lambda x:x.abort())
+        await page.route("**/**/*.woff", lambda x:x.abort())
+        await page.route("**/**/*.css", lambda x:x.abort())
         # await page.route("**/**/web/metrics", lambda x:x.abort())
         await page.route(
             "https://api.groq.com/openai/v1/models", self.get_models_from_api_response
@@ -473,20 +476,20 @@ class AgroqServer:
                 pass  # Not a valid JSON, proceed with streamed response handling
 
             lines = body_str.split("\n\n")
-            stream_chunks = []
-            for line in lines:
-                if line.strip() == "data: [DONE]":
-                    break
-                if line.startswith("data: "):
-                    json_content = line.lstrip("data: ").strip()
-                    try:
-                        chunk = json.loads(json_content)
-                        stream_chunks.append(chunk)
+            # stream_chunks = []
+            # for line in lines:
+            #     if line.strip() == "data: [DONE]":
+            #         break
+            #     if line.startswith("data: "):
+            #         json_content = line.lstrip("data: ").strip()
+            #         try:
+            #             chunk = json.loads(json_content)
+            #             stream_chunks.append(chunk)
 
-                    except json.JSONDecodeError:
-                        logger.exception("Failed to decode JSON")
+            #         except json.JSONDecodeError:
+            #             logger.exception("Failed to decode JSON")
 
-            return stream_chunks
+            return lines
 
         except Exception as e:
             logger.exception("Exception in handle_streamed_response", exc_info=e)

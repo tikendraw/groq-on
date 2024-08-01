@@ -1,5 +1,12 @@
 # Changelog
 
+## 01-08-2024
+* version update to v0.2.01
+* Supports new LLAMA3 and LLAMA3.1 MODELS   
+* supports streaming outputs
+* can be used through official groq python api (with baseurl)
+* faster than previous versions
+
 ## 15-07-2024
 * groqon stop now works as expected
 

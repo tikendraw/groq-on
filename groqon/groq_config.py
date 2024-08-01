@@ -13,7 +13,7 @@ GROQON_CONFIG_FILE = Path(groq_config_folder) / "config.yaml"
 GROQ_COOKIE_FILE = Path(groq_config_folder) / "groq_cookie.json"
 MODEL_LIST_FILE = Path(groq_config_folder) / "models.json"
 
-TOP_P = 1
+TOP_P = 1.0
 STREAM = True
 TEMPERATURE = 0.1
 MAX_TOKENS = 2048

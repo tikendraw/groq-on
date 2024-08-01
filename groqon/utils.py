@@ -14,35 +14,47 @@ def get_current_time_str():
     time_str = now.strftime("%Y-%m-%d %H:%M:%S")
     return time_str
 
+
 def log_function_call(func):
 
     if inspect.iscoroutinefunction(func):
+
         @wraps(func)
         async def wrapper(*args, **kwargs):
             start_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            cc(f"Starting function '{func.__name__}' at {start_time}", 'green', 'on_white')
+            cc(
+                f"Starting function '{func.__name__}' at {start_time}",
+                "green",
+                "on_white",
+            )
 
             result = await func(*args, **kwargs)
 
             end_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            cc(f"Exiting function '{func.__name__}' at {end_time}", 'red', 'on_white')
+            cc(f"Exiting function '{func.__name__}' at {end_time}", "red", "on_white")
 
             return result
+
     else:
+
         @wraps(func)
         def wrapper(*args, **kwargs):
             start_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            cc(f"Starting function '{func.__name__}' at {start_time}", 'green', 'on_white')
+            cc(
+                f"Starting function '{func.__name__}' at {start_time}",
+                "green",
+                "on_white",
+            )
 
             result = func(*args, **kwargs)
 
             end_time = time.strftime("%Y-%m-%d %H:%M:%S", time.localtime())
-            cc(f"Exiting function '{func.__name__}' at {end_time}", 'red', 'on_white')
+            cc(f"Exiting function '{func.__name__}' at {end_time}", "red", "on_white")
 
             return result
 
     return wrapper
-            
+
 
 def cc(x, *args, end=None, **kwargs):
     """
@@ -63,9 +75,9 @@ def cc(x, *args, end=None, **kwargs):
         colored('Hello, World!', 'red', 'on_black', ['bold', 'blink'])
         colored('Hello, World!', 'green')
     """
-    print(colored(x,*args, **kwargs), end=end)
-    
-    
+    print(colored(x, *args, **kwargs), end=end)
+
+
 # function to read config.yaml
 def load_config(config_file):
     """
@@ -80,6 +92,7 @@ def load_config(config_file):
     with open(config_file, "r") as f:
         config = yaml.safe_load(f)
     return config
+
 
 # function to save dict to config.yaml
 def save_config(config: dict, config_file):
@@ -98,7 +111,8 @@ def save_config(config: dict, config_file):
 
     return
 
-def get_model_ids(models_file, exclude:list=None):
+
+def get_model_ids(models_file, exclude: list = None):
     """
     Reads the model IDs from the models.json file and populates the modelindex list.
 
@@ -116,9 +130,8 @@ def get_model_ids(models_file, exclude:list=None):
         )
     except Exception as e:
         print(e)
-    
+
     if exclude:
         modelindex = [model for model in modelindex if model not in exclude]
-    
-    return modelindex
 
+    return modelindex

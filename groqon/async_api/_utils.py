@@ -10,13 +10,12 @@ from pathlib import Path
 from typing import Any, Dict, Iterable
 
 import aiofiles
-from pydantic import ValidationError
 from termcolor import colored
 from tqdm import tqdm
 
 from ..groq_config import DEFAULT_MODEL, modelindex
 from ..logger import get_logger
-from .schema import ChatCompletion, ChatCompletionChunk, ErrorResponse
+from .schema import ChatCompletionChunk, ErrorResponse
 
 logger = get_logger(__name__)
 
@@ -157,6 +156,10 @@ def ccc(x, *args, end=None, **kwargs):
     print(colored(x, *args, **kwargs), end=end)
 
 
+def strip_newlines(x: str) -> str:
+    return x.strip("\n\n").strip("\n").strip()
+
+
 def print_model_response(response: dict):
     """Print the model response."""
 
@@ -167,29 +170,15 @@ def print_model_response(response: dict):
         ccc(f"Model: {response.error.type}", "magenta")
         ccc(f"Code: {response.error.code}", "magenta")
     else:
-        try:
-            response = ChatCompletion(**response)
-
-            ccc(f"Query:    {response.query}", "green")
-            ccc(f"Response: {response.choices[0].message.content}", "yellow")
-            ccc(f"Model: {response.model}", "magenta")
-            ccc(
-                f"TOK/s: {calculate_tokens_per_second(response.usage.model_dump())}",
-                "magenta",
-            )
-
-        except ValidationError as e:
-            print(e)
-
-            ccc(f"Query:    {response.get('query')}", "green")
-            ccc(
-                f"Response: {response.get('choices')[0].get('message').get('content')}",
-                "yellow",
-            )
-            ccc(f"Model: {response.get('model')}", "magenta")
-            ccc(
-                f"TOK/s: {calculate_tokens_per_second(response.get('usage'))}",
-                "magenta",
-            )
+        ccc(f"Query:    {response.get('query')}", "green")
+        ccc(
+            f"Response: {strip_newlines(response.get('choices')[0].get('message').get('content'))}",
+            "yellow",
+        )
+        ccc(f"Model: {response.get('model')}", "magenta")
+        ccc(
+            f"TOK/s: {calculate_tokens_per_second(response.get('usage'))}",
+            "magenta",
+        )
 
     print()

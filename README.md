@@ -22,7 +22,7 @@ This projects uses playwright to Access [GROQ](https://www.groq.com) using pytho
 * Supports new LLAMA3 and LLAMA3.1 models 
 * Groq's python api support (just add the base url)
 ## Introduction
-Groqon is a powerful package that provides a convenient interface to interact with large language models (LLMs) hosted on **Groq.com for FREE**, **No api is required**. It offers both a command-line interface (CLI) and a Python API for seamless integration into various workflows.
+Groqon is a powerful package that provides a convenient interface to interact with large language models (LLMs) hosted on **Groq.com for FREE**, **No api key is required**. It offers both a command-line interface (CLI) and a Python API for seamless integration into various workflows.
 
 
 **Working**

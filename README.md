@@ -6,15 +6,15 @@ This projects uses playwright to Access [GROQ](https://www.groq.com) using pytho
 1. [Introduction](#introduction)
 2. [Installation](#installation)
 3. [CLI Usage](#cli-usage)
-  * [Starting the CLI](#starting-the-server)
-  * [Configuring the CLI](#configuring-the-package)
-  * [Starting the Server](#starting-the-server)
-  * [Querying the Server](#querying-the-server)
-  * [Stopping the Server](#stopping-the-server)
+    * [Starting the CLI](#starting-the-server)
+    * [Configuring the CLI](#configuring-the-groqon)
+    *  [Starting the Server](#starting-the-server)
+    * [Querying the Server](#querying-the-server)
+    * [Stopping the Server](#stopping-the-server)
 4. [Python API Usage](#python-api-usage)
-  * [Using Groq's official python api](#using-groqs-python-api)
-  * [Using the AgroqClient Class](#using-agroq-client)
-  * [Using requests Library](#using-wget-or-requests-for-api-calls)
+    * [Using Groq's official python api](#using-groqs-python-api)
+    * [Using the AgroqClient Class](#using-agroq-client)
+    * [Using requests Library](#using-wget-or-requests-for-api-calls)
 5. Key Features and Benefits
 6. Contribution
 

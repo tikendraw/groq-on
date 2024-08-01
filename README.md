@@ -111,7 +111,7 @@ The Groqon CLI provides several commands to interact with the Agroq server.
 ## Python API Usage
 
   ### using Groq's python api
-  Make sure you have start groqon server with `groqon serve` command in the background
+  Make sure groqon server is running or use `groqon serve` command to start groqon server
 
   1. Asynchronously
   ```python
@@ -186,7 +186,8 @@ The Groqon CLI provides several commands to interact with the Agroq server.
   ### using Agroq client
   To use the Groqon package in your Python code:
   
-  Make sure you have start groqon server withMaking Requests to the  `groqon serve` command in the background
+  Make sure groqon server is running or use `groqon serve` command to start groqon server
+
   ```python
   from groqon import GroqonClient, GroqonClientConfig
 

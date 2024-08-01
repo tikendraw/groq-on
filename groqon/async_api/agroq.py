@@ -78,8 +78,8 @@ class Groqon:
         self.workers_dict = {worker_id: None for worker_id in self.worker_ids}
         self.worker_score = {worker_id: 0 for worker_id in self.worker_ids}
 
-    @log_function_call
-    @profile
+    # @log_function_call
+    # @profile
     async def astart(self) -> None:
         logger.debug("Groqon server starting...")
         self.running = True
@@ -96,19 +96,7 @@ class Groqon:
                     for worker_id in self.worker_ids
                 ]
 
-                # self.server = await asyncio.start_server(
-                #     self.handle_server_request, "127.0.0.1", self._PORT
-                # )
-
-                # addrs = ", ".join(
-                #     str(sock.getsockname()) for sock in self.server.sockets
-                # )
-                # logger.info(f"Serving on {addrs}")
-
-                # async with self.server:
-                # Run server and wait for stop event
                 await asyncio.gather(
-                    # self.server.serve_forever(),
                     self.wait_for_stop(),
                     *self.worker_tasks,
                 )
@@ -124,40 +112,8 @@ class Groqon:
 
     async def wait_for_stop(self):
         await self.shutdown_event.wait()
-        # self.server.close()
-        # await self.server.wait_closed()
         await self.astop()
         print("Server stopped.")
-
-    # async def handle_server_request(self, reader, writer):
-    #     intime = time.perf_counter_ns()
-    #     data = await self.read_full_request(reader)
-    #     logger.info(f">>>>>>>> request: {intime} -{data.decode()}")
-
-    #     if ENDTOKEN in data.decode() and self.request_queue.empty():
-    #         writer.write(b"Server stopped")
-    #         await writer.drain()
-    #         writer.close()
-    #         await writer.wait_closed()
-    #         self.shutdown_event.set()
-    #         return
-
-    #     parsed_data = (
-    #         self.parse_http_request(data.decode())
-    #         if data.startswith(b"POST") or data.startswith(b"GET")
-    #         else None
-    #     )
-    #     if parsed_data:
-    #         response = self.process_request(parsed_data)
-    #         if response:
-    #             outtime = time.perf_counter_ns()
-    #             logger.info(
-    #                 f"<<<<<< response: {outtime} took {(outtime - intime):,}ns -{response}"
-    #             )
-    #             await self.send_response(writer, response)
-    #     else:
-    #         writer.close()
-    #         await writer.wait_closed()
 
     async def process_request(self, request: dict | GROQ_APIRequest):
 
@@ -292,8 +248,8 @@ class Groqon:
     def dict_to_byte(self, x: dict) -> bytes:
         return (json.dumps(x)).encode()
 
-    @log_function_call
-    @profile
+    # @log_function_call
+    # @profile
     async def astop(self):
         self.running = False
 
@@ -366,8 +322,8 @@ class Groqon:
 
         await page.close()
 
-    @log_function_call
-    @profile
+    # @log_function_call
+    # @profile
     async def do_query(self, page: Page, query: str, queue: Queue) -> None:
         try:
             textarea = await page.wait_for_selector(CHAT_INPUT_SELECTOR)
@@ -400,8 +356,8 @@ class Groqon:
                 )
             )
 
-    @log_function_call
-    @profile
+    # @log_function_call
+    # @profile
     async def setup_page(self, page: Page):
         await page.route("**/**/*.woff2", lambda x: x.abort())
         await page.route("**/**/*.woff", lambda x: x.abort())
@@ -414,8 +370,8 @@ class Groqon:
             self.url, timeout=60 * 1000, wait_until="commit"
         )  # ["commit", "domcontentloaded", "load", "networkidle"]
 
-    @log_function_call
-    @profile
+    # @log_function_call
+    # @profile
     async def handle_chat_completions(
         self,
         route: Route,
@@ -449,7 +405,7 @@ class Groqon:
         )
         await queue.put(response)
 
-    @profile
+    # @profile
     async def handle_streamed_response(
         self, response: Response, query: str
     ) -> dict | list[dict]:
@@ -494,12 +450,12 @@ class Groqon:
             logger.exception("Exception in handle_streamed_response", exc_info=e)
             return self.create_error_api_response(str(e))
 
-    @profile
+    # @profile
     def process_non_streamed_response(self, data: Dict[str, Any]) -> ChatCompletion:
         """Process a non-streamed response."""
         return ChatCompletion(**data)
 
-    @profile
+    # @profile
     def process_streamed_response(self, data: Dict[str, Any]) -> ChatCompletionChunk:
         return ChatCompletionChunk(**data)
 
@@ -515,7 +471,7 @@ class Groqon:
             error=ErrorModel(message=error_message, code=error_code, type=error_type)
         )
 
-    @profile
+    # @profile
     async def get_models_from_api_response(self, route: Route, *args, **kwargs):
         response = await route.fetch()
         json_response = await response.json()
@@ -527,12 +483,12 @@ class Groqon:
             self.got_models = True
         await route.continue_()
 
-    @profile
+    # @profile
     def byte_to_model_kwargs(self, byte: bytes) -> Dict:
         return json.loads(byte.decode())
 
-    @log_function_call
-    @profile
+    # @log_function_call
+    # @profile
     async def get_cookie_or_login(self, url: str, cookie_file: str) -> List[Dict]:
         cookie = get_cookie(cookie_file) if file_exists(cookie_file) else None
         if not cookie:
@@ -549,8 +505,8 @@ class Groqon:
             await save_cookie(cookie, cookie_file)
         return cookie
 
-    # @log_function_call
-    @profile
+    # # @log_function_call
+    # @profile
     async def login_user(self) -> list:
         async with async_playwright() as p:
             browser = await p.firefox.launch(headless=False)

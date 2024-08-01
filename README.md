@@ -3,18 +3,18 @@
 This projects uses playwright to Access [GROQ](https://www.groq.com) using python
 
 ## Table of Contents
-1. Introduction
-2. Installation
-3. CLI Usage
-  * Starting the CLI
-  * Configuring the CLI
-  * Starting the Server
-  * Querying the Server
-  * Stopping the Server
-4. Python API Usage
-  * Using Groq's official python api
-  * Using the AgroqClient Class
-  * Using requests Library
+1. [Introduction](#introduction)
+2. [Installation](#installation)
+3. [CLI Usage](#cli-usage)
+  * [Starting the CLI](#starting-the-server)
+  * [Configuring the CLI](#configuring-the-package)
+  * [Starting the Server](#starting-the-server)
+  * [Querying the Server](#querying-the-server)
+  * [Stopping the Server](#stopping-the-server)
+4. [Python API Usage](#python-api-usage)
+  * [Using Groq's official python api](#using-groqs-python-api)
+  * [Using the AgroqClient Class](#using-agroq-client)
+  * [Using requests Library](#using-wget-or-requests-for-api-calls)
 5. Key Features and Benefits
 6. Contribution
 
@@ -84,7 +84,7 @@ The Groqon CLI provides several commands to interact with the Agroq server.
   * `--top_p` , `-tp` : Top-p sampling parameter (do not use this)
   * `--stop_server` , `-ss` : Stop the server after the query (default: False)
 
-  ### Configuring the Package
+  ### Configuring the groqon
   To configure Groqon settings: (You do not have to do it. It has default settings)
   ```bash
   groqon config [OPTIONS]
@@ -183,10 +183,10 @@ The Groqon CLI provides several commands to interact with the Agroq server.
   print(chat_completion.choices[0].message.content)
   ```
 
-  ### Making Requests to the Agroq Server
+  ### using Agroq client
   To use the Groqon package in your Python code:
   
-  Make sure you have start groqon server with `groqon serve` command in the background
+  Make sure you have start groqon server withMaking Requests to the  `groqon serve` command in the background
   ```python
   from groqon import GroqonClient, GroqonClientConfig
 

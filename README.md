@@ -12,11 +12,15 @@ This projects uses playwright to Access [GROQ](https://www.groq.com) using pytho
   * Querying the Server
   * Stopping the Server
 4. Python API Usage
+  * Using Groq's official python api
   * Using the AgroqClient Class
   * Using requests Library
 5. Key Features and Benefits
 6. Contribution
 
+## Whats NEW
+* Supports new LLAMA3 and LLAMA3.1 models 
+* Groq's python api support (just add the base url)
 ## Introduction
 Groqon is a powerful package that provides a convenient interface to interact with large language models (LLMs) hosted on **Groq.com for FREE**, **No api is required**. It offers both a command-line interface (CLI) and a Python API for seamless integration into various workflows.
 
@@ -105,15 +109,89 @@ The Groqon CLI provides several commands to interact with the Agroq server.
 
 
 ## Python API Usage
+
+  ### using Groq's python api
+  Make sure you have start groqon server with `groqon serve` command in the background
+
+  1. Asynchronously
+  ```python
+  import asyncio
+  from groq import AsyncGroq
+
+  client = AsyncGroq(
+      base_url="http://localhost:8888",  # get port from web server
+      api_key="not required",
+  )
+
+
+  async def query(prompt) -> None:
+      chat_completion = await client.chat.completions.create(
+          messages=[
+              {
+                  "role": "user",
+                  "content": prompt,
+              }
+          ],
+          model="llama3-8b-8192",
+      )
+      print("+" * 33)
+      print("PROMPT: ", prompt)
+      print("RESPONSE: ")
+      print(chat_completion.choices[0].message.content)
+      print("+" * 33)
+
+
+  async def main() -> None:
+      pr = [
+          "What is the meaning of life?",
+          "What is the meaning of death?"
+          "What is the meaning of knowledge?",
+      ]
+
+      asyncio.gather(
+          query(pr[0]),
+          query(pr[1]),
+          query(pr[2]),
+      )
+
+
+  asyncio.run(main())
+  ```
+
+  2. Synchronously
+
+  ```python
+  import os
+
+  from groq import Groq
+
+  client = Groq(
+      api_key='not required',
+      base_url='http://localhost:8888', # only base url of the server is required
+  )
+
+  chat_completion = client.chat.completions.create(
+      messages=[
+          {
+              "role": "user",
+              "content": "Explain the importance of fast language models",
+          }
+      ],
+      model="llama3-8b-8192",
+  )
+
+  print(chat_completion.choices[0].message.content)
+  ```
+
   ### Making Requests to the Agroq Server
   To use the Groqon package in your Python code:
   
   Make sure you have start groqon server with `groqon serve` command in the background
   ```python
-  from groqon import AgroqClient, AgroqClientConfig
+  from groqon import GroqonClient, GroqonClientConfig
 
   # Define the configuration
-  config = AgroqClientConfig(
+  config = GroqonClientConfig(
       headless=False,
       models=['llama3-8b'], # can be llama3-70b , gemma-7b , gemma2, mixtral
       system_prompt="You are a helpful assistant.",
@@ -124,13 +202,13 @@ The Groqon CLI provides several commands to interact with the Agroq server.
   )
 
   # Create an AgroqClient instance
-  agroq = AgroqClient(config=config)
+  client = GroqonClient(config=config)
 
   # use Asynchronously =====================================
 
   # Make a single query
   async def single_query():
-      response = await agroq.multi_query_async("What is the capital of France?")
+      response = await client.multi_query_async("What is the capital of France?")
       print(response)
 
   # Make multiple queries
@@ -162,13 +240,13 @@ The Groqon CLI provides several commands to interact with the Agroq server.
   You can also make API calls to the Groqon server using wget or the requests library:
   Using wget:
   ```bash
-  wget -q -O - --header="Content-Type: application/json" --post-data '{"model": "gemma-7b-it","messages": [{"role": "system", "content": "Please try to provide useful, helpful and actionable answer"},{"role": "user", "content": "who is megan fox?"}],"temperature": 0.1,"max_tokens": 2048,"top_p": 1,"stream": true}' http://localhost:8888/
+  wget -q -O - --header="Content-Type: application/json" --post-data '{"model": "gemma-7b-it","messages": [{"role": "system", "content": "Please try to provide useful, helpful and actionable answer"},{"role": "user", "content": "who is megan fox?"}],"temperature": 0.1,"max_tokens": 2048,"top_p": 1,"stream": true}' http://localhost:8888/openai/v1/chat/completions
   ```
   Using requests:
   ```python
 import requests
 
-url = "http://localhost:8888"
+url = "http://localhost:8888/openai/v1/chat/completions"
 data = {
     "model": "gemma-7b-it",
     "messages": [

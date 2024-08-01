@@ -4,8 +4,8 @@ from typing import Any, Dict, Iterable, List, Literal, Optional, Union
 
 from groq.types.chat.chat_completion import (
     ChatCompletion,
-    Choice,
     ChatCompletionMessage,
+    Choice,
 )
 from groq.types.chat.chat_completion_assistant_message_param import (
     ChatCompletionAssistantMessageParam,
@@ -59,7 +59,7 @@ class ErrorResponse(BaseModel):
     status_code: int | None = None
 
 
-class AgroqServerConfig(BaseModel):
+class GroqonConfig(BaseModel):
     cookie_file: str = GROQ_COOKIE_FILE
     models: List[str] = [DEFAULT_MODEL]
     headless: bool = True
@@ -68,14 +68,14 @@ class AgroqServerConfig(BaseModel):
     verbose: bool = True
 
 
-class AgroqClientConfig(BaseModel):
+class GroqonClientConfig(BaseModel):
     models: List[str] = [DEFAULT_MODEL]
     save_dir: Union[str, Path, None] = None
     system_prompt: str = SYSTEM_PROMPT
     print_output: bool = True
-    temperature: float = TEMPERATURE
+    temperature: float = Field(default=TEMPERATURE, gt=1e-8, le=2.0)
     max_tokens: int = MAX_TOKENS
-    top_p: int = TOP_P
+    top_p: float = Field(default=TOP_P, gt=0.01, le=1.0)
     stream: bool = STREAM
     stop_server: bool = False
 
@@ -111,7 +111,7 @@ class APIRequestModel(BaseModel):
     messages: List[MessageModel] | None = None
     temperature: float = TEMPERATURE
     max_tokens: int = MAX_TOKENS
-    top_p: int = TOP_P
+    top_p: float = TOP_P
     stream: bool = STREAM
 
     class Config:
@@ -386,9 +386,9 @@ def parse_chat_completion_chunks(
         choice = Choice(
             index=index,
             message=ChatCompletionMessage(**message_data),
-            finish_reason=last_chunk.choices[-1].finish_reason
-            if last_chunk.choices
-            else None,
+            finish_reason=(
+                last_chunk.choices[-1].finish_reason if last_chunk.choices else None
+            ),
             logprobs=last_chunk.choices[-1].logprobs if last_chunk.choices else None,
         )
         combined_data["choices"].append(choice)

@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "groqon"
-version = "0.2.01"
+version = "0.2.02"
 description = "Use Groq.com as llm"
 authors = ["tikendraw <tikendraksahu1029@gmail.com>"]
 readme = "README.md"

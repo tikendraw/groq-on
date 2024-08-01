@@ -15,25 +15,25 @@ from pydantic import BaseModel
 from ..groq_config import ENDTOKEN, PORT, modelindex
 from ..logger import get_logger
 from ..utils import cc, log_function_call
-from .agroq_utils import (
+from ._utils import (
     get_model_from_name,
     print_model_response,
     write_dict_to_json,
     x_eq_len_of_y,
 )
 from .schema import (
-    AgroqClientConfig,
     GROQ_APIRequest,
+    GroqonClientConfig,
 )
 
 logger = get_logger(__name__)
 
 
-class AgroqClient(BaseModel):
-    config: AgroqClientConfig
+class GroqonClient(BaseModel):
+    config: GroqonClientConfig
     _PORT: Optional[int] = PORT
     tools: list[dict] | None = None
-    _base_url: str = f"http://localhost:{PORT}"
+    _base_url: str = f"http://localhost:{PORT}/openai/v1/chat/completions"
 
     # @log_function_call
     async def multi_query_async(
